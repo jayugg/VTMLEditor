@@ -1,0 +1,14 @@
+{
+    "type": "code",
+    "modid": "vtmleditor",
+    "name": "VTMLEditor",
+    "authors": [
+        "jayu"
+    ],
+    "description": "Edit VTML in-game",
+    "side": "client",
+    "version": "1.0.0",
+    "dependencies": {
+        "game": ""
+    }
+}

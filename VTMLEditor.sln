@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CakeBuild", "CakeBuild\CakeBuild.csproj", "{E060B7DC-46E9-4BB2-B984-056F06C42CBA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VTMLEditor", "VTMLEditor\VTMLEditor.csproj", "{621DEC5B-197C-4C52-A2FB-A7530A4FBA4C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E060B7DC-46E9-4BB2-B984-056F06C42CBA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E060B7DC-46E9-4BB2-B984-056F06C42CBA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E060B7DC-46E9-4BB2-B984-056F06C42CBA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E060B7DC-46E9-4BB2-B984-056F06C42CBA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{621DEC5B-197C-4C52-A2FB-A7530A4FBA4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{621DEC5B-197C-4C52-A2FB-A7530A4FBA4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{621DEC5B-197C-4C52-A2FB-A7530A4FBA4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{621DEC5B-197C-4C52-A2FB-A7530A4FBA4C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
