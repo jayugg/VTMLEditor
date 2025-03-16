@@ -1,0 +1,2 @@
+- Add scrollbars and standardise dialog size
+- Add commands to open the dialog: .vtmleditor and .vtmle

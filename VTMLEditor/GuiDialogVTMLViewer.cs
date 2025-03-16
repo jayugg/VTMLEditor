@@ -14,30 +14,47 @@ public class GuiDialogVTMLViewer : GuiDialog
         this.DialogTitle = DialogTitle;
     }
 
-    public override string ToggleKeyCombinationCode => VTMLESystem.UIKeyCode;
+    public override string ToggleKeyCombinationCode => VtmleSystem.UiKeyCode;
 
     private void ComposeDialog()
     {
-        // Auto-sized dialog at the center of the screen
-        ElementBounds dialogBounds = ElementStdBounds.AutosizedMainDialog.WithAlignment(EnumDialogArea.RightMiddle);
+        ElementBounds dialogBounds = ElementStdBounds.AutosizedMainDialog.WithAlignment(EnumDialogArea.CenterMiddle);
+        
+        ElementBounds insetBounds = ElementBounds.Fixed(0, GuiStyle.TitleBarHeight, 510, 678);
+        ElementBounds scrollbarBounds = insetBounds.RightCopy().WithFixedWidth(20);
 
-        ElementBounds textBounds = ElementBounds.Fixed(0, 30, 500, 600);
-
-        // Background boundaries. Again, just make it fit it's child elements, then add the text as a child element
-        ElementBounds insetBounds = ElementBounds.Fixed(-5, 25, 510, 610);
-        ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding); 
-        bgBounds.BothSizing = ElementSizing.FitToChildren;
-        bgBounds.WithChildren(textBounds);
-        bgBounds.WithChildren(insetBounds);
+        ElementBounds textBounds = insetBounds.ForkContainingChild(GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding);
+        ElementBounds bgBounds = ElementBounds.Fill
+            .WithFixedPadding(GuiStyle.ElementToDialogPadding)
+            .WithSizing(ElementSizing.FitToChildren)
+            .WithChildren(insetBounds, scrollbarBounds);
+        
+        ElementBounds clipBounds = insetBounds.ForkContainingChild(GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding);
 
         SingleComposer = capi.Gui.CreateCompo(DialogTitle, dialogBounds)
                 .AddShadedDialogBG(bgBounds)
-                .AddInset(insetBounds)
                 .AddDialogTitleBar(DialogTitle, OnTitleBarClose)
-                .AddRichtext(text, CairoFont.WhiteSmallText(), textBounds)
+                .BeginChildElements()
+                .AddInset(insetBounds)
+                .BeginClip(clipBounds)
+                .AddRichtext(text, CairoFont.WhiteSmallText(), textBounds, "text")
+                .EndClip()
+                .AddVerticalScrollbar(OnNewScrollbarValue, scrollbarBounds, "scrollbar")
                 .Compose();
+        
+        // After composing dialog, need to set the scrolling area heights to enable scroll behavior
+        float scrollVisibleHeight = (float)clipBounds.fixedHeight;
+        float scrollTotalHeight = (float)SingleComposer.GetRichtext("text").TotalHeight;
+        SingleComposer.GetScrollbar("scrollbar").SetHeights(scrollVisibleHeight, scrollTotalHeight);
     }
-    
+
+    private void OnNewScrollbarValue(float value)
+    {
+        ElementBounds bounds = SingleComposer.GetRichtext("text").Bounds;
+        bounds.fixedY = 5 - value;
+        bounds.CalcWorldBounds();
+    }
+
     public void RefreshDialog()
     {
         SingleComposer?.Dispose();

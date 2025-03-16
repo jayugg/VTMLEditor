@@ -11,6 +11,7 @@ public class GuiDialogVTMLEditor : GuiDialog
   public override double DrawOrder => 0.2;
   public string DialogTitle;
   private string searchLangKey = Lang.DefaultLocale;
+  private string SearchTextInput { get; set; }
   private GuiDialogVTMLViewer viewerDialog;
 
   public GuiDialogVTMLEditor(ICoreClientAPI capi, string DialogTitle, GuiDialogVTMLViewer viewerDialog) : base(capi)
@@ -19,59 +20,70 @@ public class GuiDialogVTMLEditor : GuiDialog
     this.viewerDialog = viewerDialog;
   }
 
-  public override string ToggleKeyCombinationCode => VTMLESystem.UIKeyCode;
+  public override string ToggleKeyCombinationCode => VtmleSystem.UiKeyCode;
 
   private void ComposeDialog()
 {
     // Auto-sized dialog at the center of the screen
     ElementBounds dialogBounds = ElementStdBounds.AutosizedMainDialog.WithAlignment(EnumDialogArea.LeftMiddle);
-    var baseShift = 0;
-    ElementBounds searchBounds = ElementBounds.Fixed(0, 30, 420, 30);
-    ElementBounds buttonBounds = ElementBounds.Fixed(422, 30, 78.0, 25.0).WithFixedPadding(2);
-    ElementBounds buttonBounds2 = ElementBounds.Fixed(422, 70, 78.0, 25.0).WithFixedPadding(2);
-    ElementBounds buttonBounds3 = ElementBounds.Fixed(342, 70, 78.0, 25.0).WithFixedPadding(2);
+    ElementBounds searchInputBounds = ElementBounds.Fixed(0, 30, 420, 30);
+    ElementBounds searchButtonBounds = ElementBounds.Fixed(422, 30, 78.0, 25.0).WithFixedPadding(2);
+    ElementBounds copyButtonBounds = ElementBounds.Fixed(422, 70, 78.0, 25.0).WithFixedPadding(2);
+    ElementBounds previewButtonBounds = ElementBounds.Fixed(342, 70, 78.0, 25.0).WithFixedPadding(2);
     ElementBounds dropDownBounds = ElementBounds.Fixed(0, 70, 78.0, 25.0).WithFixedPadding(2);
-    ElementBounds textBounds = ElementBounds.Fixed(0, 110, 500, 600);
+    ElementBounds clipBounds = ElementBounds.Fixed(0, 110, 500, 600);
+    ElementBounds textBounds = clipBounds.ForkContainingChild();
+    ElementBounds scrollbarBounds = textBounds.RightCopy().WithFixedWidth(20);
 
     // Background boundaries. Again, just make it fit it's child elements, then add the text as a child element
     ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding);
     bgBounds.BothSizing = ElementSizing.FitToChildren;
-    bgBounds.WithChildren(searchBounds);
-    bgBounds.WithChildren(buttonBounds);
-    bgBounds.WithChildren(buttonBounds2);
-    bgBounds.WithChildren(buttonBounds3);
-    bgBounds.WithChildren(dropDownBounds);
-    bgBounds.WithChildren(textBounds);
+    bgBounds.WithChildren(searchInputBounds, searchButtonBounds, copyButtonBounds, previewButtonBounds, dropDownBounds)
+      .WithChildren(scrollbarBounds, clipBounds);
 
     SingleComposer = capi.Gui.CreateCompo(DialogTitle, dialogBounds)
         .AddShadedDialogBG(bgBounds)
         .AddDialogTitleBar(DialogTitle, OnTitleBarClose)
-        .AddTextArea(textBounds, OnTextChanged, CairoFont.WhiteSmallText(), "textArea")
-        .AddTextInput(searchBounds, null, CairoFont.WhiteSmallText(), "searchInput")
-        .AddSmallButton(Lang.Get("Search"), this.OnPressSearch, buttonBounds, EnumButtonStyle.Small, "search")
-        .AddSmallButton(Lang.Get("Copy"), this.OnPressCopy, buttonBounds2, EnumButtonStyle.Small, "copy")
-        .AddToggleButton(Lang.Get("Preview"), CairoFont.SmallButtonText(), OnTogglePreview, buttonBounds3, "showViewer")
+        .AddVerticalScrollbar(OnNewScrollbarValue, scrollbarBounds, "scrollbar")
+        .AddTextInput(searchInputBounds, t=> SearchTextInput = t, CairoFont.WhiteSmallText(), "searchInput")
+        .AddSmallButton(Lang.Get("Search"), this.OnPressSearch, searchButtonBounds, EnumButtonStyle.Small, "search")
+        .AddSmallButton(Lang.Get("Copy"), this.OnPressCopy, copyButtonBounds, EnumButtonStyle.Small, "copy")
+        .AddToggleButton(Lang.Get("Preview"), CairoFont.SmallButtonText(), OnTogglePreview, previewButtonBounds, "showViewer")
         .AddDropDown(Lang.AvailableLanguages.Keys.ToArray(),
           Lang.AvailableLanguages.Keys.ToArray(),
           Lang.AvailableLanguages.Keys.IndexOf(k=> k == searchLangKey),
           OnLangSelectionChanged, dropDownBounds)
+        .BeginClip(clipBounds)
+        .AddTextArea(textBounds, OnTextChanged, CairoFont.WhiteSmallText(), "textArea")
+        .EndClip()
         .Compose();
-    SingleComposer.GetToggleButton("showViewer").SetValue(true);
+    
     SingleComposer.GetTextInput("searchInput").SetPlaceHolderText($"{Lang.Get("Search for Lang Key")} ({Lang.Get("@ for wildcard search")})");
+    if (SearchTextInput is null || SearchTextInput?.Length > 0)SingleComposer.GetTextInput("searchInput").SetValue(SearchTextInput);
     SetText(viewerDialog.Text);
+    
+    // After composing dialog, need to set the scrolling area heights to enable scroll behavior
+    float scrollVisibleHeight = (float)clipBounds.fixedHeight;
+    float scrollTotalHeight = (float)SingleComposer.GetTextArea("textArea").Bounds.OuterHeight;
+    SingleComposer.GetScrollbar("scrollbar").SetHeights(scrollVisibleHeight, scrollTotalHeight);
 }
+
+  private void OnNewScrollbarValue(float value)
+  {
+    ElementBounds bounds = SingleComposer.GetTextArea("textArea").Bounds;
+    bounds.fixedY = 5 - value;
+    bounds.CalcWorldBounds();
+  }
 
   private void OnTogglePreview(bool toggled)
   {
-    if (toggled)
+    if (this.viewerDialog.IsOpened())
     {
-      this.viewerDialog.Text = SingleComposer.GetTextArea("textArea").GetText();
-      if (!viewerDialog.TryOpen())
-        this.viewerDialog.RefreshDialog();
+      this.viewerDialog.TryClose();
     }
     else
     {
-      viewerDialog.TryClose();
+      this.viewerDialog.TryOpen();
     }
   }
 
@@ -133,18 +145,7 @@ public class GuiDialogVTMLEditor : GuiDialog
     ComposeDialog();
     base.OnGuiOpened();
   }
-
-  public override bool TryOpen()
-  {
-    this.viewerDialog.ignoreNextKeyPress = true;
-    return base.TryOpen() & this.viewerDialog.TryOpen();
-  }
-
-  public override bool TryClose()
-  {
-    return base.TryClose() & this.viewerDialog.TryClose();
-  }
-
+  
   public override bool PrefersUngrabbedMouse => true;
   
 }

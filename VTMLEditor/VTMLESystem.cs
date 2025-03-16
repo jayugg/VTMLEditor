@@ -5,15 +5,15 @@ using Vintagestory.API.Config;
 
 namespace VTMLEditor;
 
-public class VTMLESystem : ModSystem
+public class VtmleSystem : ModSystem
 {
     public override bool ShouldLoad(EnumAppSide side) => side == EnumAppSide.Client;
-    public static string UIKeyCode = Modid + ":hotkey-pee";
     public static ILogger Logger;
     public static string Modid;
     public static ICoreClientAPI Capi;
     private GuiDialogVTMLEditor _editorDialog;
     private GuiDialogVTMLViewer _viewerDialog;
+    public static string UiKeyCode => Modid + ":hotkey-vtml-editor";
     
     public override void StartPre(ICoreAPI api)
     {
@@ -27,36 +27,52 @@ public class VTMLESystem : ModSystem
     {
         base.StartClientSide(api);
         Capi = api;
-        api.Input.RegisterHotKey(UIKeyCode, Lang.Get(UIKeyCode), GlKeys.Y, HotkeyType.DevTool);
-        api.Input.SetHotKeyHandler(UIKeyCode, OnEditorHotkey);
-        api.Event.LevelFinalize += new Action(this.Event_LevelFinalize);
+        api.Input.RegisterHotKey(UiKeyCode, Lang.Get(UiKeyCode), GlKeys.Y, HotkeyType.DevTool);
+        api.Input.SetHotKeyHandler(UiKeyCode, this.OnEditorHotkey);
+        api.Event.LevelFinalize += this.Event_LevelFinalize;
+        api.ChatCommands
+            .Create("vtmle")
+            .WithAlias("vtmleditor")
+            .WithDescription("Open VTML Editor")
+            .HandleWith(_ => OnOpenDialogCommand(api));
+    }
+
+    private TextCommandResult OnOpenDialogCommand(ICoreClientAPI api)
+    {
+        ToggleDialog();
+        return TextCommandResult.Success();
     }
 
     private void Event_LevelFinalize()
     {
-        this._viewerDialog = new GuiDialogVTMLViewer(Capi, "VTMLViewer");
-        this._editorDialog = new GuiDialogVTMLEditor(Capi, "VTMLEditor", this._viewerDialog);
+        this._viewerDialog = new GuiDialogVTMLViewer(Capi, Lang.Get("VTMLViewer"));
+        this._editorDialog = new GuiDialogVTMLEditor(Capi, Lang.Get("VTMLEditor"), this._viewerDialog);
     }
 
     private bool OnEditorHotkey(KeyCombination key)
     {
+        return ToggleDialog();
+    }
+
+    private bool ToggleDialog()
+    {
+        bool result;
         if (this._editorDialog.IsOpened())
         {
-            this._editorDialog.TryClose();
+            result = this._editorDialog.TryClose();
         }
         else
         {
-            this._editorDialog.TryOpen();
+            result = this._editorDialog.TryOpen();
             this._editorDialog.ignoreNextKeyPress = true;
         }
-        return true;
+        return result;
     }
-    
+
     public override void Dispose()
     {
         Logger = null;
         Modid = null;
-        UIKeyCode = null;
         base.Dispose();
     }
 }
