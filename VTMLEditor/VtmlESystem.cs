@@ -1,7 +1,7 @@
-﻿using System;
-using Vintagestory.API.Client;
+﻿using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using VTMLEditor.TextHighlighting;
 
 namespace VTMLEditor;
 
@@ -14,6 +14,7 @@ public class VtmleSystem : ModSystem
     private GuiDialogVTMLEditor _editorDialog;
     private GuiDialogVTMLViewer _viewerDialog;
     public static string UiKeyCode => Modid + ":hotkey-vtml-editor";
+    public static VtmlHighlightTheme Theme { get; private set; }
     
     public override void StartPre(ICoreAPI api)
     {
@@ -35,6 +36,22 @@ public class VtmleSystem : ModSystem
             .WithAlias("vtmleditor")
             .WithDescription("Open VTML Editor")
             .HandleWith(_ => OnOpenDialogCommand(api));
+    }
+    
+    public override void AssetsLoaded(ICoreAPI api)
+    {
+        base.AssetsLoaded(api);
+        var loadedTheme = api.Assets.TryGet($"{Modid}:config/{Modid}/theme.json").ToObject<VtmlHighlightTheme>();
+        if (loadedTheme is { FontName.Length: > 0, FontSize: > 0 })
+        {
+            Logger.Warning("Loaded theme.json.");
+            Theme = loadedTheme;
+        }
+        else
+        {
+            Logger.Warning("Failed to load theme.json. Using default theme.");
+            Theme = new VtmlHighlightTheme();
+        }
     }
 
     private TextCommandResult OnOpenDialogCommand(ICoreClientAPI api)

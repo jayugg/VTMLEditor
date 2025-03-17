@@ -3,6 +3,7 @@ using System.Linq;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 using Vintagestory.API.Util;
+using VTMLEditor.GuiElements;
 
 namespace VTMLEditor;
 
@@ -54,7 +55,7 @@ public class GuiDialogVTMLEditor : GuiDialog
           Lang.AvailableLanguages.Keys.IndexOf(k=> k == searchLangKey),
           OnLangSelectionChanged, dropDownBounds)
         .BeginClip(clipBounds)
-        .AddTextArea(textBounds, OnTextChanged, CairoFont.WhiteSmallText(), "textArea")
+        .AddVtmlEditorArea(textBounds, OnTextChanged, TextUtilExtensions.EditorFont(VtmleSystem.Theme.FontName, VtmleSystem.Theme.FontSize), "textArea")
         .EndClip()
         .Compose();
     
@@ -64,13 +65,13 @@ public class GuiDialogVTMLEditor : GuiDialog
     
     // After composing dialog, need to set the scrolling area heights to enable scroll behavior
     float scrollVisibleHeight = (float)clipBounds.fixedHeight;
-    float scrollTotalHeight = (float)SingleComposer.GetTextArea("textArea").Bounds.OuterHeight;
+    float scrollTotalHeight = (float)SingleComposer.GetVtmlEditorArea("textArea").Bounds.OuterHeight;
     SingleComposer.GetScrollbar("scrollbar").SetHeights(scrollVisibleHeight, scrollTotalHeight);
 }
 
   private void OnNewScrollbarValue(float value)
   {
-    ElementBounds bounds = SingleComposer.GetTextArea("textArea").Bounds;
+    ElementBounds bounds = SingleComposer.GetVtmlEditorArea("textArea").Bounds;
     bounds.fixedY = 5 - value;
     bounds.CalcWorldBounds();
   }
@@ -95,14 +96,14 @@ public class GuiDialogVTMLEditor : GuiDialog
   private bool OnPressCopy()
   {
     // Copy using the system clipboard
-    var text = SingleComposer.GetTextArea("textArea").GetText();
+    var text = SingleComposer.GetVtmlEditorArea("textArea").GetText();
     capi.Input.ClipboardText = text;
     return true;
   }
 
   private void SetText(string newText)
   {
-    SingleComposer.GetTextArea("textArea").SetValue(newText);
+    SingleComposer.GetVtmlEditorArea("textArea").SetValue(newText);
   }
 
   private bool OnPressSearch()

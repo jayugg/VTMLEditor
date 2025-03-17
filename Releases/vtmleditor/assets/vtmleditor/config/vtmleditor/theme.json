@@ -1,0 +1,12 @@
+{
+  "FontName": "sans-serif",
+  "FontSize": "14",
+  "TokenColors": {
+    "TagDelimiter": "#8F8F8FFF",
+    "TagName": "#8F8F8FFF",
+    "AttributeName": "#CC9966FF",
+    "EqualsSign": "#8F8F8FFF",
+    "AttributeValue": "#6BA6CEFF",
+    "Text": null
+  }
+}
