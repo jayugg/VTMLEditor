@@ -1,3 +1,1 @@
-- Add syntax highlighting
-- Add font options
-- Add syntax highlighting theme support
+- Custom theme support
