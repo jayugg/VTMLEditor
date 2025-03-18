@@ -3,20 +3,19 @@ using System.Collections.Generic;
 using System.Text;
 using Cairo;
 using Vintagestory.API.Client;
-using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
+using VTMLEditor.TextHighlighting;
 
 namespace VTMLEditor.GuiElements;
 
+// This class is a flattened copy of GuiElementEditableTextBase and GuiElementTextBase
 public class GuiElementEditorAreaBase : GuiElementControl
 {
     public TextDrawUtil textUtil;
     protected string text;
-    /// <summary>Whether or not the text path mode is active.</summary>
-    public bool textPathMode;
     /// <summary>The font of the Text Element.</summary>
     public CairoFont Font;
-    protected float RightPadding;
+    public Dictionary<VtmlTokenType, string?>  ThemeColors { get; set; }
 
     public string Text
     {
@@ -45,13 +44,18 @@ public class GuiElementEditorAreaBase : GuiElementControl
     /// <param name="capi">The Client API</param>
     /// <param name="font">The font of the text.</param>
     /// <param name="bounds">The bounds of the component.</param>
-    public GuiElementEditorAreaBase(ICoreClientAPI capi, CairoFont font, ElementBounds bounds)
+    public GuiElementEditorAreaBase(
+      ICoreClientAPI capi,
+      CairoFont font,
+      ElementBounds bounds,
+      Dictionary<VtmlTokenType, string?>  themeColors)
     : this(capi, "", font, bounds)
     {
     this.caretTexture = new LoadedTexture(capi);
     this.textTexture = new LoadedTexture(capi);
     this.lines = new List<string>() { "" };
     this.linesStaging = new List<string>() { "" };
+    this.ThemeColors = themeColors;
     }
 
     public override void ComposeElements(Context ctx, ImageSurface surface)
@@ -64,52 +68,13 @@ public class GuiElementEditorAreaBase : GuiElementControl
     public virtual void ComposeTextElements(Context ctx, ImageSurface surface)
     {
     }
-
-    public double GetMultilineTextHeight()
-    {
-    return this.textUtil.GetMultilineTextHeight(this.Font, this.text, this.Bounds.InnerWidth - (double) this.RightPadding);
-    }
-
-    public double DrawMultilineTextAt(
-    Context ctx,
-    double posX,
-    double posY,
-    EnumTextOrientation orientation = EnumTextOrientation.Left)
-    {
-    this.Font.SetupContext(ctx);
-    TextLine[] lines = this.textUtil.Lineize(this.Font, this.text, this.Bounds.InnerWidth - (double) this.RightPadding);
-    ctx.Save();
-    Matrix matrix = ctx.Matrix;
-    matrix.Translate(posX, posY);
-    ctx.Matrix = matrix;
-    this.textUtil.DrawMultilineTextHighlighted(ctx, this.Font, lines, orientation);
-    ctx.Restore();
-    return lines.Length != 0 ? lines[lines.Length - 1].Bounds.Y + lines[lines.Length - 1].Bounds.Height : 0.0;
-    }
-
-    /// <summary>Draws the line of text on a component.</summary>
-    /// <param name="ctx">The context of the text</param>
-    /// <param name="text">The text of the text.</param>
-    /// <param name="posX">The X Position of the text.</param>
-    /// <param name="posY">The Y position of the text.</param>
-    /// <param name="textPathMode">The pathing mode.</param>
-    public void DrawTextLineAt(
-    Context ctx,
-    string text,
-    double posX,
-    double posY,
-    bool textPathMode = false)
-    {
-    this.textUtil.DrawTextLineHighlighted(ctx, this.Font, text, posX, posY, textPathMode);
-    }
-
+    
     /// <summary>Gets the text on the element.</summary>
     /// <returns>The text of the element.</returns>
-    public string GetText() => string.Join("", (IEnumerable<string>) this.lines);
+    public string GetText() => string.Join("", this.lines);
+    
 
-    internal virtual void setFont(CairoFont font) => this.Font = font;
-
-    internal float[] caretColor = new float[4]
+    internal float[] caretColor = new float[]
     {
       1f,
       1f,
@@ -150,8 +115,6 @@ public class GuiElementEditorAreaBase : GuiElementControl
     public bool WordWrap = true;
     protected int pcaretPosLine;
     protected int pcaretPosInLine;
-
-    public List<string> GetLines() => new List<string>((IEnumerable<string>) this.lines);
 
     public int TextLengthWithoutLineBreaks
     {
@@ -243,7 +206,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
       if (this.multilineMode)
       {
         double val2 = y / ctx.FontExtents.Height;
-        if (val2 > (double) this.lines.Count)
+        if (val2 > this.lines.Count)
         {
           this.CaretPosLine = this.lines.Count - 1;
           this.CaretPosInLine = this.lines[this.CaretPosLine].Length;
@@ -283,7 +246,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
       if (this.multilineMode)
       {
         this.caretX = this.Font.GetTextExtents(this.lines[this.CaretPosLine].Substring(0, this.CaretPosInLine)).XAdvance;
-        this.caretY = this.Font.GetFontExtents().Height * (double) this.CaretPosLine;
+        this.caretY = this.Font.GetFontExtents().Height * this.CaretPosLine;
       }
       else
       {
@@ -301,24 +264,6 @@ public class GuiElementEditorAreaBase : GuiElementControl
       if (caretPositionChanged == null)
         return;
       caretPositionChanged(posLine, posInLine);
-    }
-
-    /// <summary>
-    /// Sets a numerical value to the text, appending it to the end of the text.
-    /// </summary>
-    /// <param name="value">The value to add to the text.</param>
-    public void SetValue(float value)
-    {
-      this.SetValue(value.ToString((IFormatProvider) GlobalConstants.DefaultCultureInfo));
-    }
-
-    /// <summary>
-    /// Sets a numerical value to the text, appending it to the end of the text.
-    /// </summary>
-    /// <param name="value">The value to add to the text.</param>
-    public void SetValue(double value)
-    {
-      this.SetValue(value.ToString((IFormatProvider) GlobalConstants.DefaultCultureInfo));
     }
 
     /// <summary>
@@ -341,12 +286,12 @@ public class GuiElementEditorAreaBase : GuiElementControl
       GuiElementEditableTextBase.OnTryTextChangeDelegate tryTextChangeText = this.OnTryTextChangeText;
       if ((tryTextChangeText != null ? (!tryTextChangeText(newLines) ? 1 : 0) : 0) != 0 || newLines.Count > this.maxlines && newLines.Count >= this.lines.Count)
       {
-        this.linesStaging = new List<string>((IEnumerable<string>) this.lines);
+        this.linesStaging = new List<string>(this.lines);
       }
       else
       {
-        this.lines = new List<string>((IEnumerable<string>) newLines);
-        this.linesStaging = new List<string>((IEnumerable<string>) this.lines);
+        this.lines = new List<string>(newLines);
+        this.linesStaging = new List<string>(this.lines);
         this.TextChanged();
       }
     }
@@ -376,14 +321,14 @@ public class GuiElementEditorAreaBase : GuiElementControl
     {
       Action<string> onTextChanged = this.OnTextChanged;
       if (onTextChanged != null)
-        onTextChanged(string.Join("", (IEnumerable<string>) this.lines));
+        onTextChanged(string.Join("", this.lines));
       this.RecomposeText();
     }
 
     internal virtual void RecomposeText()
     {
       this.Bounds.CalcWorldBounds();
-      string text = (string) null;
+      string text = null;
       if (this.multilineMode)
       {
         this.textSize.X = (int) (this.Bounds.OuterWidth - this.rightSpacing);
@@ -410,9 +355,9 @@ public class GuiElementEditorAreaBase : GuiElementControl
           lines[index] = new TextLine()
           {
             Text = this.lines[index].Replace("\r\n", "").Replace("\n", ""),
-            Bounds = new LineRectangled(0.0, (double) index * height1, this.Bounds.InnerWidth, height1)
+            Bounds = new LineRectangled(0.0, index * height1, this.Bounds.InnerWidth, height1)
           };
-        this.textUtil.DrawMultilineTextHighlightedAt(ctx1, this.Font, lines, this.Bounds.absPaddingX + this.leftPadding, this.Bounds.absPaddingY, boxWidth);
+        this.textUtil.DrawMultilineTextHighlightedAt(ThemeColors, ctx1, this.Font, lines, this.Bounds.absPaddingX + this.leftPadding, this.Bounds.absPaddingY, boxWidth);
       }
       else
       {
@@ -420,7 +365,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
         fontExtents = ctx1.FontExtents;
         double height2 = fontExtents.Height;
         this.topPadding = Math.Max(0.0, num - height2) / 2.0;
-        this.textUtil.DrawTextLineHighlighted(ctx1, this.Font, text, this.Bounds.absPaddingX + this.leftPadding, this.Bounds.absPaddingY + this.topPadding);
+        this.textUtil.DrawTextLineHighlighted(ThemeColors, ctx1, this.Font, text, this.Bounds.absPaddingX + this.leftPadding, this.Bounds.absPaddingY + this.topPadding);
       }
       this.generateTexture(surface1, ref this.textTexture);
       ctx1.Dispose();
@@ -431,7 +376,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
       ImageSurface surface2 = new ImageSurface(Format.Argb32, 3, (int) height1);
       Context ctx2 = this.genContext(surface2);
       this.Font.SetupContext(ctx2);
-      ctx2.SetSourceRGBA((double) this.caretColor[0], (double) this.caretColor[1], (double) this.caretColor[2], (double) this.caretColor[3]);
+      ctx2.SetSourceRGBA(this.caretColor[0], this.caretColor[1], this.caretColor[2], this.caretColor[3]);
       ctx2.LineWidth = 1.0;
       ctx2.NewPath();
       ctx2.MoveTo(2.0, 0.0);
@@ -446,7 +391,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
     public override void OnMouseDownOnElement(ICoreClientAPI api, MouseEvent args)
     {
       base.OnMouseDownOnElement(api, args);
-      this.SetCaretPos((double) args.X - this.Bounds.absX, (double) args.Y - this.Bounds.absY);
+      this.SetCaretPos(args.X - this.Bounds.absX, args.Y - this.Bounds.absY);
     }
 
     public override void OnKeyDown(ICoreClientAPI api, KeyEvent args)
@@ -481,7 +426,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
       if (args.KeyCode == 104 && (args.CtrlPressed || args.CommandPressed))
       {
         string str1 = api.Forms.GetClipboardText().Replace("\uFEFF", "");
-        string str2 = string.Join("", (IEnumerable<string>) this.lines);
+        string str2 = string.Join("", this.lines);
         int caretPosInLine = this.CaretPosInLine;
         for (int index = 0; index < this.CaretPosLine; ++index)
           caretPosInLine += this.lines[index].Length;
@@ -521,7 +466,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
       GuiElementEditableTextBase.OnTryTextChangeDelegate tryTextChangeText = this.OnTryTextChangeText;
       if ((tryTextChangeText != null ? (!tryTextChangeText(this.linesStaging) ? 1 : 0) : 0) != 0)
         return;
-      this.lines = new List<string>((IEnumerable<string>) this.linesStaging);
+      this.lines = new List<string>(this.linesStaging);
       this.TextChanged();
       this.SetCaretPos(0, this.CaretPosLine + 1);
       this.api.Gui.PlaySound("tick");
@@ -610,7 +555,9 @@ public class GuiElementEditorAreaBase : GuiElementControl
     public void MoveCursor(int dir, bool wholeWord = false)
     {
       bool flag1 = false;
-      bool flag2 = (this.CaretPosInLine > 0 || this.CaretPosLine > 0) && dir < 0 || (this.CaretPosInLine < this.lines[this.CaretPosLine].Length || this.CaretPosLine < this.lines.Count - 1) && dir > 0;
+      bool flag2 = (this.CaretPosInLine > 0 || this.CaretPosLine > 0) && dir < 0 ||
+                   (this.CaretPosInLine < this.lines[this.CaretPosLine].Length ||
+                    this.CaretPosLine < this.lines.Count - 1) && dir > 0;
       int posInLine = this.CaretPosInLine;
       int caretPosLine = this.CaretPosLine;
       for (; !flag1; flag1 = !wholeWord || posInLine > 0 && this.lines[caretPosLine][posInLine - 1] == ' ')
@@ -626,6 +573,7 @@ public class GuiElementEditorAreaBase : GuiElementControl
           else
             break;
         }
+
         if (posInLine > this.lines[caretPosLine].TrimEnd('\r', '\n').Length)
         {
           if (caretPosLine < this.lines.Count - 1)
@@ -637,21 +585,10 @@ public class GuiElementEditorAreaBase : GuiElementControl
             break;
         }
       }
+
       if (!flag2)
         return;
       this.SetCaretPos(posInLine, caretPosLine);
       this.api.Gui.PlaySound("tick");
     }
-
-    /// <summary>Sets the number of lines in the Text Area.</summary>
-    /// <param name="maxlines">The maximum number of lines.</param>
-    public void SetMaxLines(int maxlines) => this.maxlines = maxlines;
-
-    public void SetMaxHeight(int maxheight)
-    {
-      FontExtents fontExtents = this.Font.GetFontExtents();
-      this.maxlines = (int) Math.Floor((double) maxheight / fontExtents.Height);
-    }
-
-    public delegate bool OnTryTextChangeDelegate(List<string> lines);
 }

@@ -4,6 +4,8 @@ using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 using Vintagestory.API.Util;
 using VTMLEditor.GuiElements;
+using VTMLEditor.TextHighlighting;
+using AssetLocation = Vintagestory.API.Common.AssetLocation;
 
 namespace VTMLEditor;
 
@@ -12,10 +14,16 @@ public class GuiDialogVTMLEditor : GuiDialog
   public override double DrawOrder => 0.2;
   public string DialogTitle;
   private string searchLangKey = Lang.DefaultLocale;
-  private string SearchTextInput { get; set; }
-  private GuiDialogVTMLViewer viewerDialog;
+  private string? SearchTextInput { get; set; }
+  private GuiDialogVTMLViewer? viewerDialog;
+  
+  public AssetLocation? SelectedThemeLoc { get; set; }
+  public VtmlEditorTheme SelectedTheme =>
+    (this.SelectedThemeLoc == null ?
+      new VtmlEditorTheme() :
+      VtmleSystem.Themes[this.SelectedThemeLoc]);
 
-  public GuiDialogVTMLEditor(ICoreClientAPI capi, string DialogTitle, GuiDialogVTMLViewer viewerDialog) : base(capi)
+  public GuiDialogVTMLEditor(ICoreClientAPI? capi, string DialogTitle, GuiDialogVTMLViewer? viewerDialog) : base(capi)
   {
     this.DialogTitle = DialogTitle;
     this.viewerDialog = viewerDialog;
@@ -32,6 +40,7 @@ public class GuiDialogVTMLEditor : GuiDialog
     ElementBounds copyButtonBounds = ElementBounds.Fixed(422, 70, 78.0, 25.0).WithFixedPadding(2);
     ElementBounds previewButtonBounds = ElementBounds.Fixed(342, 70, 78.0, 25.0).WithFixedPadding(2);
     ElementBounds dropDownBounds = ElementBounds.Fixed(0, 70, 78.0, 25.0).WithFixedPadding(2);
+    ElementBounds themeDropDownBounds = dropDownBounds.RightCopy(20);
     ElementBounds clipBounds = ElementBounds.Fixed(0, 110, 500, 600);
     ElementBounds textBounds = clipBounds.ForkContainingChild();
     ElementBounds scrollbarBounds = textBounds.RightCopy().WithFixedWidth(20);
@@ -39,29 +48,40 @@ public class GuiDialogVTMLEditor : GuiDialog
     // Background boundaries. Again, just make it fit it's child elements, then add the text as a child element
     ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding);
     bgBounds.BothSizing = ElementSizing.FitToChildren;
-    bgBounds.WithChildren(searchInputBounds, searchButtonBounds, copyButtonBounds, previewButtonBounds, dropDownBounds)
+    bgBounds.WithChildren(searchInputBounds, searchButtonBounds, copyButtonBounds, previewButtonBounds, dropDownBounds, themeDropDownBounds)
       .WithChildren(scrollbarBounds, clipBounds);
 
     SingleComposer = capi.Gui.CreateCompo(DialogTitle, dialogBounds)
-        .AddShadedDialogBG(bgBounds)
-        .AddDialogTitleBar(DialogTitle, OnTitleBarClose)
-        .AddVerticalScrollbar(OnNewScrollbarValue, scrollbarBounds, "scrollbar")
-        .AddTextInput(searchInputBounds, t=> SearchTextInput = t, CairoFont.WhiteSmallText(), "searchInput")
-        .AddSmallButton(Lang.Get("Search"), this.OnPressSearch, searchButtonBounds, EnumButtonStyle.Small, "search")
-        .AddSmallButton(Lang.Get("Copy"), this.OnPressCopy, copyButtonBounds, EnumButtonStyle.Small, "copy")
-        .AddToggleButton(Lang.Get("Preview"), CairoFont.SmallButtonText(), OnTogglePreview, previewButtonBounds, "showViewer")
-        .AddDropDown(Lang.AvailableLanguages.Keys.ToArray(),
-          Lang.AvailableLanguages.Keys.ToArray(),
-          Lang.AvailableLanguages.Keys.IndexOf(k=> k == searchLangKey),
-          OnLangSelectionChanged, dropDownBounds)
-        .BeginClip(clipBounds)
-        .AddVtmlEditorArea(textBounds, OnTextChanged, TextUtilExtensions.EditorFont(VtmleSystem.Theme.FontName, VtmleSystem.Theme.FontSize), "textArea")
-        .EndClip()
-        .Compose();
+      .AddShadedDialogBG(bgBounds)
+      .AddDialogTitleBar(DialogTitle, OnTitleBarClose)
+      .AddVerticalScrollbar(OnNewScrollbarValue, scrollbarBounds, "scrollbar")
+      .AddTextInput(searchInputBounds, t => SearchTextInput = t, CairoFont.WhiteSmallText(), "searchInput")
+      .AddSmallButton(Lang.Get("Search"), this.OnPressSearch, searchButtonBounds, EnumButtonStyle.Small, "search")
+      .AddSmallButton(Lang.Get("Copy"), this.OnPressCopy, copyButtonBounds, EnumButtonStyle.Small, "copy")
+      .AddToggleButton(Lang.Get("Preview"), CairoFont.SmallButtonText(), OnTogglePreview, previewButtonBounds,
+        "showViewer")
+      .AddDropDown(Lang.AvailableLanguages.Keys.ToArray(),
+        Lang.AvailableLanguages.Keys.ToArray(),
+        Lang.AvailableLanguages.Keys.IndexOf(k => k == searchLangKey),
+        OnLangSelectionChanged, dropDownBounds);
+    if (VtmleSystem.Themes.Count > 1)
+    {
+      SingleComposer.AddDropDown(VtmleSystem.Themes.Keys.Select(a => a.ToString()).ToArray(),
+        VtmleSystem.Themes.Values.Select(t => t.Code).ToArray(),
+        SelectedThemeLoc == null ? 0 : VtmleSystem.Themes.Keys.IndexOf(a => a == SelectedThemeLoc),
+        OnThemeSelectionChanged, themeDropDownBounds);
+    }
+    SingleComposer
+      .BeginClip(clipBounds)
+      .AddVtmlEditorArea(textBounds, OnTextChanged, SelectedTheme.TokenColors,
+        TextUtilExtensions.EditorFont(SelectedTheme.FontName, SelectedTheme.FontSize), "textArea")
+      .EndClip()
+      .Compose();
+    VtmleSystem.Logger?.Warning($"Loaded themes: {VtmleSystem.Themes.Count}");
     
     SingleComposer.GetTextInput("searchInput").SetPlaceHolderText($"{Lang.Get("Search for Lang Key")} ({Lang.Get("@ for wildcard search")})");
     if (SearchTextInput is null || SearchTextInput?.Length > 0)SingleComposer.GetTextInput("searchInput").SetValue(SearchTextInput);
-    SetText(viewerDialog.Text);
+    if (viewerDialog?.Text != null) SingleComposer.GetVtmlEditorArea("textArea").SetValue(viewerDialog.Text);
     
     // After composing dialog, need to set the scrolling area heights to enable scroll behavior
     float scrollVisibleHeight = (float)clipBounds.fixedHeight;
@@ -78,13 +98,13 @@ public class GuiDialogVTMLEditor : GuiDialog
 
   private void OnTogglePreview(bool toggled)
   {
-    if (this.viewerDialog.IsOpened())
+    if (this.viewerDialog != null && this.viewerDialog.IsOpened())
     {
       this.viewerDialog.TryClose();
     }
     else
     {
-      this.viewerDialog.TryOpen();
+      this.viewerDialog?.TryOpen();
     }
   }
 
@@ -92,18 +112,18 @@ public class GuiDialogVTMLEditor : GuiDialog
   {
     this.searchLangKey = code;
   }
+  
+  private void OnThemeSelectionChanged(string code, bool selected)
+  {
+    this.SelectedThemeLoc = new AssetLocation(code);
+    this.ComposeDialog();
+  }
 
   private bool OnPressCopy()
   {
-    // Copy using the system clipboard
     var text = SingleComposer.GetVtmlEditorArea("textArea").GetText();
     capi.Input.ClipboardText = text;
     return true;
-  }
-
-  private void SetText(string newText)
-  {
-    SingleComposer.GetVtmlEditorArea("textArea").SetValue(newText);
   }
 
   private bool OnPressSearch()
@@ -125,15 +145,17 @@ public class GuiDialogVTMLEditor : GuiDialog
         langText = Lang.Get("Available entries:\n") + string.Join("\n", allKeys ?? Array.Empty<string>());
       }
     }
-    SetText(langText);
+    SingleComposer.GetVtmlEditorArea("textArea").SetValue(langText);
     OnTextChanged(langText);
     return true;
   }
 
   private void OnTextChanged(string newText)
   {
-    this.viewerDialog.Text = newText;
-    this.viewerDialog.RefreshDialog();
+    var guiDialogVtmlViewer = this.viewerDialog;
+    if (guiDialogVtmlViewer == null) return;
+    guiDialogVtmlViewer.Text = newText;
+    guiDialogVtmlViewer.RefreshDialog();
   }
 
   private void OnTitleBarClose()

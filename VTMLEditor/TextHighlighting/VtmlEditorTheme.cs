@@ -1,4 +1,3 @@
-#nullable enable
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Vintagestory.API.Client;
@@ -9,8 +8,17 @@ namespace VTMLEditor.TextHighlighting;
 /// <summary>
 /// Provides a highlight theme for VTML syntax highlighting.
 /// </summary>
-public class VtmlHighlightTheme
+public class VtmlEditorTheme
 {
+    [JsonProperty]
+    public string Code = "Default";
+    
+    [JsonProperty]
+    public string FontName = GuiStyle.StandardFontName; // "monospace", "sans-serif", "menlo
+
+    [JsonProperty]
+    public int FontSize = 14;
+    
     [JsonProperty]
     public Dictionary<VtmlTokenType, string?> TokenColors { get; set; } = new()
     {
@@ -28,19 +36,15 @@ public class VtmlHighlightTheme
         { VtmlTokenType.Text, null }
     };
     
-    [JsonProperty]
-    public string FontName = GuiStyle.StandardFontName; // "monospace", "sans-serif", "menlo
-
-    [JsonProperty]
-    public int FontSize = 14;
-    
-    public double[]? GetColor(VtmlTokenType tokenType)
+    public static double[]? GetColor(Dictionary<VtmlTokenType, string?> tokenColors, VtmlTokenType tokenType)
     {
-        if (!TokenColors.TryGetValue(tokenType, out string? color) ||
+        if (!tokenColors.TryGetValue(tokenType, out string? color) ||
             color?.Length < 8)
         {
             return null;
         }
         return color == null ? null : ColorUtil.Hex2Doubles(color);
     }
+    
+    public static VtmlEditorTheme Default => new VtmlEditorTheme();
 }

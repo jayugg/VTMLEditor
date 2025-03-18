@@ -9,6 +9,7 @@ public static class TextUtilExtensions
 {
     public static void DrawMultilineTextHighlightedAt(
         this TextDrawUtil util,
+        Dictionary<VtmlTokenType, string?>  themeColors,
         Context ctx,
         CairoFont font,
         TextLine[] lines,
@@ -22,7 +23,7 @@ public static class TextUtilExtensions
         matrix.Translate(posX, posY);
         ctx.Matrix = matrix;
         font.SetupContext(ctx);
-        util.DrawMultilineTextHighlighted(ctx, font, lines, orientation);
+        util.DrawMultilineTextHighlighted(themeColors, ctx, font, lines, orientation);
         ctx.Restore();
     }
     
@@ -30,6 +31,7 @@ public static class TextUtilExtensions
     
     public static void DrawMultilineTextHighlighted(
         this TextDrawUtil util,
+        Dictionary<VtmlTokenType, string?>  themeColors,
         Context ctx,
         CairoFont font,
         TextLine[] lines,
@@ -48,13 +50,14 @@ public static class TextUtilExtensions
                     offsetX = (line.LeftSpace + line.RightSpace) / 2.0;
                 if (orientation == EnumTextOrientation.Right)
                     offsetX = line.LeftSpace + line.RightSpace;
-                util.DrawTextLineHighlighted(ctx, font, lineTokens, offsetX + line.Bounds.X, line.Bounds.Y);
+                util.DrawTextLineHighlighted(themeColors, ctx, font, lineTokens, offsetX + line.Bounds.X, line.Bounds.Y);
             }
         }
     }
     
     public static void DrawTextLineHighlighted(
             this TextDrawUtil util,
+            Dictionary<VtmlTokenType, string?>  themeColors,
             Context ctx,
             CairoFont font,
             List<VtmlToken> tokens,
@@ -68,7 +71,7 @@ public static class TextUtilExtensions
             double currentX = offsetX;
             foreach (var token in tokens)
             {
-                var color = VtmleSystem.Theme.GetColor(token.TokenType);
+                var color = VtmlEditorTheme.GetColor(themeColors, token.TokenType);
                 if (color != null)
                 {
                     ctx.SetSourceRGBA(color[0], color[1], color[2], color[3]);
@@ -104,6 +107,7 @@ public static class TextUtilExtensions
 
     public static void DrawTextLineHighlighted(
         this TextDrawUtil util,
+        Dictionary<VtmlTokenType, string?>  themeColors,
         Context ctx,
         CairoFont font,
         string text,
@@ -112,7 +116,7 @@ public static class TextUtilExtensions
         bool textPathMode = false)
     {
         var tokens = VtmlTokenizer.Tokenize(text);
-        util.DrawTextLineHighlighted(ctx, font, tokens, offsetX, offsetY, textPathMode);
+        util.DrawTextLineHighlighted(themeColors, ctx, font, tokens, offsetX, offsetY, textPathMode);
     }
     
     public static CairoFont EditorFont(string fontName, double fontSize = 14)
