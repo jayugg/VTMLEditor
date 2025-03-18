@@ -1,7 +1,9 @@
 ﻿using System.Collections.Generic;
+using HarmonyLib;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using VTMLEditor.GuiElements;
 using VTMLEditor.TextHighlighting;
 
 namespace VTMLEditor;
@@ -12,6 +14,7 @@ public class VtmleSystem : ModSystem
     public static ILogger? Logger;
     public static string? Modid;
     public static ICoreClientAPI? Capi;
+    public static Harmony? HarmonyInstance;
     private GuiDialogVTMLEditor? _editorDialog;
     private GuiDialogVTMLViewer? _viewerDialog;
     public static string UiKeyCode => Modid + ":hotkey-vtml-editor";
@@ -24,6 +27,8 @@ public class VtmleSystem : ModSystem
         
         Logger = api.Logger;
         Modid = Mod.Info.ModID;
+        HarmonyInstance = new Harmony(Modid);
+        HarmonyInstance.PatchAll();
     }
 
     public override void StartClientSide(ICoreClientAPI? api)
@@ -102,6 +107,8 @@ public class VtmleSystem : ModSystem
         Logger = null;
         Modid = null;
         Capi = null;
+        HarmonyInstance?.UnpatchAll(Modid);
+        HarmonyInstance = null;
         _editorDialog?.Dispose();
         _viewerDialog?.Dispose();
         Themes.Clear();
