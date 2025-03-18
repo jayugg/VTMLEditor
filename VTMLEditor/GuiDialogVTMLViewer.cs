@@ -9,7 +9,7 @@ public class GuiDialogVTMLViewer : GuiDialog
     private string text = "";
     public string Text { get => text; set => text = value; }
 
-    public GuiDialogVTMLViewer(ICoreClientAPI capi, string DialogTitle) : base(capi)
+    public GuiDialogVTMLViewer(ICoreClientAPI? capi, string DialogTitle) : base(capi)
     {
         this.DialogTitle = DialogTitle;
     }

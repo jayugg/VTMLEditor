@@ -1,4 +1,5 @@
-﻿using Vintagestory.API.Client;
+﻿using System.Collections.Generic;
+using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using VTMLEditor.TextHighlighting;
@@ -8,14 +9,15 @@ namespace VTMLEditor;
 public class VtmleSystem : ModSystem
 {
     public override bool ShouldLoad(EnumAppSide side) => side == EnumAppSide.Client;
-    public static ILogger Logger;
-    public static string Modid;
-    public static ICoreClientAPI Capi;
-    private GuiDialogVTMLEditor _editorDialog;
-    private GuiDialogVTMLViewer _viewerDialog;
+    public static ILogger? Logger;
+    public static string? Modid;
+    public static ICoreClientAPI? Capi;
+    private GuiDialogVTMLEditor? _editorDialog;
+    private GuiDialogVTMLViewer? _viewerDialog;
     public static string UiKeyCode => Modid + ":hotkey-vtml-editor";
-    public static VtmlHighlightTheme Theme { get; private set; }
-    
+
+    public static Dictionary<AssetLocation, VtmlEditorTheme> Themes = new();
+
     public override void StartPre(ICoreAPI api)
     {
         base.StartPre(api);
@@ -24,12 +26,13 @@ public class VtmleSystem : ModSystem
         Modid = Mod.Info.ModID;
     }
 
-    public override void StartClientSide(ICoreClientAPI api)
+    public override void StartClientSide(ICoreClientAPI? api)
     {
         base.StartClientSide(api);
         Capi = api;
-        api.Input.RegisterHotKey(UiKeyCode, Lang.Get(UiKeyCode), GlKeys.Y, HotkeyType.DevTool);
-        api.Input.SetHotKeyHandler(UiKeyCode, this.OnEditorHotkey);
+        api?.Input.RegisterHotKey(UiKeyCode, Lang.Get(UiKeyCode), GlKeys.Y, HotkeyType.DevTool);
+        api?.Input.SetHotKeyHandler(UiKeyCode, this.OnEditorHotkey);
+        if (api == null) return;
         api.Event.LevelFinalize += this.Event_LevelFinalize;
         api.ChatCommands
             .Create("vtmle")
@@ -41,20 +44,28 @@ public class VtmleSystem : ModSystem
     public override void AssetsLoaded(ICoreAPI api)
     {
         base.AssetsLoaded(api);
-        var loadedTheme = api.Assets.TryGet($"{Modid}:config/{Modid}/theme.json").ToObject<VtmlHighlightTheme>();
-        if (loadedTheme is { FontName.Length: > 0, FontSize: > 0 })
+        var loadedThemes = api.Assets.GetMany<VtmlEditorTheme[]>(Logger, $"config/{Modid}/themes.json");
+        Logger?.Notification($"Found {loadedThemes.Count} theme locations");
+        foreach (var themeLocation in loadedThemes.Keys)
         {
-            Logger.Warning("Loaded theme.json.");
-            Theme = loadedTheme;
-        }
-        else
-        {
-            Logger.Warning("Failed to load theme.json. Using default theme.");
-            Theme = new VtmlHighlightTheme();
+            var index = 0;
+            foreach (var theme in loadedThemes[themeLocation])
+            {
+                if (theme is { FontName.Length: > 0, FontSize: > 0, Code.Length: > 0})
+                {
+                    Themes.Add(new AssetLocation(themeLocation.Domain, $"theme-{theme.Code}"), theme);
+                    Logger?.Notification($"Loaded theme: {theme.Code} from {themeLocation}");
+                }
+                else
+                {
+                    Logger?.Warning($"Failed to load theme at index {index} from location {themeLocation}");
+                }
+                index++;
+            }
         }
     }
 
-    private TextCommandResult OnOpenDialogCommand(ICoreClientAPI api)
+    private TextCommandResult OnOpenDialogCommand(ICoreClientAPI? api)
     {
         ToggleDialog();
         return TextCommandResult.Success();
@@ -62,8 +73,8 @@ public class VtmleSystem : ModSystem
 
     private void Event_LevelFinalize()
     {
-        this._viewerDialog = new GuiDialogVTMLViewer(Capi, Lang.Get("VTMLViewer"));
-        this._editorDialog = new GuiDialogVTMLEditor(Capi, Lang.Get("VTMLEditor"), this._viewerDialog);
+        this._viewerDialog = new GuiDialogVTMLViewer(Capi, Lang.Get("VTML Viewer"));
+        this._editorDialog = new GuiDialogVTMLEditor(Capi, Lang.Get("VTML Editor"), this._viewerDialog);
     }
 
     private bool OnEditorHotkey(KeyCombination key)
@@ -74,14 +85,14 @@ public class VtmleSystem : ModSystem
     private bool ToggleDialog()
     {
         bool result;
-        if (this._editorDialog.IsOpened())
+        if (this._editorDialog != null && this._editorDialog.IsOpened())
         {
             result = this._editorDialog.TryClose();
         }
         else
         {
-            result = this._editorDialog.TryOpen();
-            this._editorDialog.ignoreNextKeyPress = true;
+            result = this._editorDialog?.TryOpen() ?? false;
+            if (this._editorDialog != null) this._editorDialog.ignoreNextKeyPress = true;
         }
         return result;
     }
@@ -90,6 +101,10 @@ public class VtmleSystem : ModSystem
     {
         Logger = null;
         Modid = null;
+        Capi = null;
+        _editorDialog?.Dispose();
+        _viewerDialog?.Dispose();
+        Themes.Clear();
         base.Dispose();
     }
 }

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Vintagestory.API.Client;
+using VTMLEditor.TextHighlighting;
 
 namespace VTMLEditor.GuiElements;
 
@@ -15,13 +17,14 @@ public static class ExtraGuiComposerHelpers
         this GuiComposer composer,
         ElementBounds bounds,
         Action<string> onTextChanged,
+        Dictionary<VtmlTokenType, string?> themeColors,
         CairoFont font = null,
         string key = null)
     {
         if (font == null)
             font = CairoFont.SmallTextInput();
         if (!composer.Composed)
-            composer.AddInteractiveElement((GuiElement) new GuiElementEditorArea(composer.Api, bounds, onTextChanged, font), key);
+            composer.AddInteractiveElement(new GuiElementEditorArea(composer.Api, bounds, onTextChanged, font, themeColors), key);
         return composer;
     }
     
