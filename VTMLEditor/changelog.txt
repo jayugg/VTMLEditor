@@ -1,1 +1,2 @@
 - Custom theme support
+- 1.20.5

@@ -1,0 +1,80 @@
+[
+  {
+    "Code": "default",
+    "FontName": "sans-serif",
+    "FontSize": "14",
+    "TokenColors": {
+      "TagDelimiter": "#8F8F8FFF",
+      "TagName": "#8F8F8FFF",
+      "AttributeName": "#CC9966FF",
+      "EqualsSign": "#8F8F8FFF",
+      "AttributeValue": "#6BA6CEFF",
+      "Text": null
+    }
+  },
+  {
+    "Code": "monospace",
+    "FontName": "monospace",
+    "FontSize": "13",
+    "TokenColors": {
+      "TagDelimiter": "#8F8F8FFF",
+      "TagName": "#8F8F8FFF",
+      "AttributeName": "#CC9966FF",
+      "EqualsSign": "#8F8F8FFF",
+      "AttributeValue": "#6BA6CEFF",
+      "Text": null
+    }
+  },
+  {
+    "Code": "menlo",
+    "FontName": "menlo",
+    "FontSize": "13",
+    "TokenColors": {
+      "TagDelimiter": "#8F8F8FFF",
+      "TagName": "#8F8F8FFF",
+      "AttributeName": "#CC9966FF",
+      "EqualsSign": "#8F8F8FFF",
+      "AttributeValue": "#6BA6CEFF",
+      "Text": null
+    }
+  },
+  {
+    "Code": "dune",
+    "FontName": "menlo",
+    "FontSize": "13",
+    "TokenColors": {
+      "TagDelimiter": "#1fad83ff",
+      "TagName": "#1fad83ff",
+      "AttributeName": "#b854d4ff",
+      "EqualsSign": "#6684e1ff",
+      "AttributeValue": "#d43552ff",
+      "Text": null
+    }
+  },
+  {
+    "Code": "savannah",
+    "FontName": "menlo",
+    "FontSize": "13",
+    "TokenColors": {
+      "TagDelimiter": "#489963ff",
+      "TagName": "#1c9aa0ff",
+      "AttributeName": "#55859bff",
+      "EqualsSign": "#478c90ff",
+      "AttributeValue": "#b16139ff",
+      "Text": null
+    }
+  },
+  {
+    "Code": "cave",
+    "FontName": "menlo",
+    "FontSize": "13",
+    "TokenColors": {
+      "TagDelimiter": "#a06e3bff",
+      "TagName": "#aa573cff",
+      "AttributeName": "#2a9292ff",
+      "EqualsSign": "#955ae7ff",
+      "AttributeValue": "#955ae7ff",
+      "Text": null
+    }
+  }
+]
