@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Vintagestory.API.Client;
-using VTMLEditor.TextHighlighting;
+using VTMLEditor.EditorFeatures;
 
 namespace VTMLEditor.GuiElements;
 
@@ -11,6 +11,7 @@ public static class ExtraGuiComposerHelpers
     /// <param name="composer"></param>
     /// <param name="bounds">The bounds of the Text Area</param>
     /// <param name="onTextChanged">The event fired when the text is changed.</param>
+    /// <param name="themeColors">The theme colors for syntax highlighting.</param>
     /// <param name="font">The font of the text.</param>
     /// <param name="key">The name of the text area.</param>
     public static GuiComposer AddVtmlEditorArea(
@@ -18,11 +19,10 @@ public static class ExtraGuiComposerHelpers
         ElementBounds bounds,
         Action<string> onTextChanged,
         Dictionary<VtmlTokenType, string?> themeColors,
-        CairoFont font = null,
-        string key = null)
+        CairoFont? font = null,
+        string? key = null)
     {
-        if (font == null)
-            font = CairoFont.SmallTextInput();
+        font ??= CairoFont.SmallTextInput();
         if (!composer.Composed)
             composer.AddInteractiveElement(new GuiElementEditorArea(composer.Api, bounds, onTextChanged, font, themeColors), key);
         return composer;

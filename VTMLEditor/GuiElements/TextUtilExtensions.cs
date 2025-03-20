@@ -1,13 +1,13 @@
 using System.Collections.Generic;
 using Cairo;
 using Vintagestory.API.Client;
-using VTMLEditor.TextHighlighting;
+using VTMLEditor.EditorFeatures;
 
 namespace VTMLEditor.GuiElements;
 
 public static class TextUtilExtensions
 {
-    public static void DrawMultilineTextHighlightedAt(
+    public static void DrawMultilineTextHighligtedAt(
         this TextDrawUtil util,
         Dictionary<VtmlTokenType, string?>  themeColors,
         Context ctx,
@@ -27,8 +27,6 @@ public static class TextUtilExtensions
         ctx.Restore();
     }
     
-    
-    
     public static void DrawMultilineTextHighlighted(
         this TextDrawUtil util,
         Dictionary<VtmlTokenType, string?>  themeColors,
@@ -43,7 +41,7 @@ public static class TextUtilExtensions
         for (int index = 0; index < tokens.Count; ++index)
         {
             TextLine line = lines[index];
-            List<VtmlToken> lineTokens = tokens[index];
+            List<VtmlColorToken> lineTokens = tokens[index];
             if (line.Text.Length != 0)
             {
                 if (orientation == EnumTextOrientation.Center)
@@ -60,7 +58,7 @@ public static class TextUtilExtensions
             Dictionary<VtmlTokenType, string?>  themeColors,
             Context ctx,
             CairoFont font,
-            List<VtmlToken> tokens,
+            List<VtmlColorToken> tokens,
             double offsetX = 0.0,
             double offsetY = 0.0,
             bool textPathMode = false)
@@ -101,7 +99,6 @@ public static class TextUtilExtensions
                 // Advance the x position by the measured width plus the extra for each trailing space.
                 currentX += tokenWidth;
             }
-
             ctx.Restore();
         }
 

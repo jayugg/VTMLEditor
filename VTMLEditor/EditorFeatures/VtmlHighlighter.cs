@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using HarmonyLib;
 using Vintagestory.API.Client;
 
-namespace VTMLEditor.TextHighlighting;
+namespace VTMLEditor.EditorFeatures;
 
 /// <summary>
 /// VTML token types for simple syntax highlighting.
@@ -21,7 +21,7 @@ public enum VtmlTokenType
 /// <summary>
 /// Represents a VTML token with its content and type.
 /// </summary>
-public class VtmlToken
+public class VtmlColorToken
 {
     public string Content { get; set; }
     public VtmlTokenType TokenType { get; set; }
@@ -36,10 +36,10 @@ public static class VtmlTokenizer
     /// Tokenizes a VTML string into tokens.
     /// </summary>
     /// <param name="text">The VTML source text.</param>
-    /// <returns>A list of <see cref="VtmlToken"/> objects.</returns>
-    public static List<VtmlToken> Tokenize(string text)
+    /// <returns>A list of <see cref="VtmlColorToken"/> objects.</returns>
+    public static List<VtmlColorToken> Tokenize(string text)
     {
-        var tokens = new List<VtmlToken>();
+        var tokens = new List<VtmlColorToken>();
         int lastPos = 0;
         // Use regex to locate VTML tags.
         var tagRegex = new Regex(@"<[^>]*>", RegexOptions.Compiled);
@@ -48,14 +48,14 @@ public static class VtmlTokenizer
             // Add text preceding the tag.
             if (tagMatch.Index > lastPos)
             {
-                tokens.Add(new VtmlToken
+                tokens.Add(new VtmlColorToken
                 {
                     Content = text.Substring(lastPos, tagMatch.Index - lastPos),
                     TokenType = VtmlTokenType.Text
                 });
             }
             // Add the opening tag delimiter.
-            tokens.Add(new VtmlToken
+            tokens.Add(new VtmlColorToken
             {
                 Content = "<",
                 TokenType = VtmlTokenType.TagDelimiter
@@ -64,7 +64,7 @@ public static class VtmlTokenizer
             string innerContent = tagMatch.Value.Substring(1, tagMatch.Value.Length - 2);
             tokens.AddRange(TokenizeTagContent(innerContent));
             // Add the closing tag delimiter.
-            tokens.Add(new VtmlToken
+            tokens.Add(new VtmlColorToken
             {
                 Content = ">",
                 TokenType = VtmlTokenType.TagDelimiter
@@ -74,7 +74,7 @@ public static class VtmlTokenizer
         // Add remaining text after the last tag.
         if (lastPos < text.Length)
         {
-            tokens.Add(new VtmlToken
+            tokens.Add(new VtmlColorToken
             {
                 Content = text.Substring(lastPos),
                 TokenType = VtmlTokenType.Text
@@ -88,10 +88,10 @@ public static class VtmlTokenizer
     /// Extracts the tag name and attributes, preserving whitespace.
     /// </summary>
     /// <param name="content">The inner content of a tag.</param>
-    /// <returns>A list of <see cref="VtmlToken"/> tokens.</returns>
-    private static List<VtmlToken> TokenizeTagContent(string content)
+    /// <returns>A list of <see cref="VtmlColorToken"/> tokens.</returns>
+    private static List<VtmlColorToken> TokenizeTagContent(string content)
     {
-        var tokens = new List<VtmlToken>();
+        var tokens = new List<VtmlColorToken>();
         int pos = 0;
 
         // Match tag name and its leading whitespace.
@@ -101,14 +101,14 @@ public static class VtmlTokenizer
             // Add any leading whitespace.
             if (!string.IsNullOrEmpty(tagNameMatch.Groups[1].Value))
             {
-                tokens.Add(new VtmlToken
+                tokens.Add(new VtmlColorToken
                 {
                     Content = tagNameMatch.Groups[1].Value,
                     TokenType = VtmlTokenType.Text
                 });
             }
             // Add the tag name using TagName token type.
-            tokens.Add(new VtmlToken
+            tokens.Add(new VtmlColorToken
             {
                 Content = tagNameMatch.Groups[2].Value,
                 TokenType = VtmlTokenType.TagName
@@ -130,26 +130,26 @@ public static class VtmlTokenizer
                 // Add whitespace before the attribute.
                 if (!string.IsNullOrEmpty(attrMatch.Groups[1].Value))
                 {
-                    tokens.Add(new VtmlToken
+                    tokens.Add(new VtmlColorToken
                     {
                         Content = attrMatch.Groups[1].Value,
                         TokenType = VtmlTokenType.Text
                     });
                 }
                 // Attribute name.
-                tokens.Add(new VtmlToken
+                tokens.Add(new VtmlColorToken
                 {
                     Content = attrMatch.Groups[2].Value,
                     TokenType = VtmlTokenType.AttributeName
                 });
                 // Equals sign.
-                tokens.Add(new VtmlToken
+                tokens.Add(new VtmlColorToken
                 {
                     Content = attrMatch.Groups[3].Value,
                     TokenType = VtmlTokenType.EqualsSign
                 });
                 // Attribute value.
-                tokens.Add(new VtmlToken
+                tokens.Add(new VtmlColorToken
                 {
                     Content = attrMatch.Groups[4].Value,
                     TokenType = VtmlTokenType.AttributeValue
@@ -159,7 +159,7 @@ public static class VtmlTokenizer
             else
             {
                 // Add any remaining content as text.
-                tokens.Add(new VtmlToken
+                tokens.Add(new VtmlColorToken
                 {
                     Content = content.Substring(pos),
                     TokenType = VtmlTokenType.Text
@@ -175,13 +175,13 @@ public static class VtmlTokenizer
     /// </summary>
     /// <param name="lines">The array of text lines.</param>
     /// <returns>A list of token lists, one for each line.</returns>
-    public static List<List<VtmlToken>> Tokenize(TextLine[] lines)
+    public static List<List<VtmlColorToken>> Tokenize(TextLine[] lines)
     {
         // Join full text from all lines using newline.
         string fullText = lines.Join(line => line.Text, "\n");
-        List<VtmlToken> fullTextTokens = Tokenize(fullText);
-        var linesTokens = new List<List<VtmlToken>>();
-        var currentLineTokens = new List<VtmlToken>();
+        List<VtmlColorToken> fullTextTokens = Tokenize(fullText);
+        var linesTokens = new List<List<VtmlColorToken>>();
+        var currentLineTokens = new List<VtmlColorToken>();
 
         foreach (var token in fullTextTokens)
         {
@@ -194,7 +194,7 @@ public static class VtmlTokenizer
                     {
                         if (parts[i].Length > 0)
                         {
-                            currentLineTokens.Add(new VtmlToken
+                            currentLineTokens.Add(new VtmlColorToken
                             {
                                 Content = parts[i],
                                 TokenType = token.TokenType
@@ -203,11 +203,11 @@ public static class VtmlTokenizer
                     }
                     else
                     {
-                        linesTokens.Add(new List<VtmlToken>(currentLineTokens));
+                        linesTokens.Add(new List<VtmlColorToken>(currentLineTokens));
                         currentLineTokens.Clear();
                         if (parts[i].Length > 0)
                         {
-                            currentLineTokens.Add(new VtmlToken
+                            currentLineTokens.Add(new VtmlColorToken
                             {
                                 Content = parts[i],
                                 TokenType = token.TokenType
@@ -221,7 +221,7 @@ public static class VtmlTokenizer
                 currentLineTokens.Add(token);
             }
         }
-        linesTokens.Add(new List<VtmlToken>(currentLineTokens));
+        linesTokens.Add(new List<VtmlColorToken>(currentLineTokens));
         return linesTokens;
     }
 }

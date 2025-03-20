@@ -3,8 +3,9 @@ using System.Linq;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 using Vintagestory.API.Util;
+using VTMLEditor.EditorFeatures;
 using VTMLEditor.GuiElements;
-using VTMLEditor.TextHighlighting;
+using VTMLEditor.GuiElements.Vanilla;
 using AssetLocation = Vintagestory.API.Common.AssetLocation;
 
 namespace VTMLEditor;
@@ -81,6 +82,7 @@ public class GuiDialogVTMLEditor : GuiDialog
     
     SingleComposer.GetTextInput("searchInput").SetPlaceHolderText($"{Lang.Get("Search for Lang Key")} ({Lang.Get("@ for wildcard search")})");
     if (SearchTextInput is null || SearchTextInput?.Length > 0)SingleComposer.GetTextInput("searchInput").SetValue(SearchTextInput);
+    
     if (viewerDialog?.Text != null) SingleComposer.GetVtmlEditorArea("textArea").SetValue(viewerDialog.Text);
     
     // After composing dialog, need to set the scrolling area heights to enable scroll behavior

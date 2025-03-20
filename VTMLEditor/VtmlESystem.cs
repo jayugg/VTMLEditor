@@ -3,8 +3,8 @@ using HarmonyLib;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using VTMLEditor.EditorFeatures;
 using VTMLEditor.GuiElements;
-using VTMLEditor.TextHighlighting;
 
 namespace VTMLEditor;
 

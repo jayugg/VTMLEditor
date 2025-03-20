@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 using Vintagestory.API.Client;
 using Vintagestory.API.MathTools;
 
-namespace VTMLEditor.TextHighlighting;
+namespace VTMLEditor.EditorFeatures;
 
 /// <summary>
 /// Provides a highlight theme for VTML syntax highlighting.
