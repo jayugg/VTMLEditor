@@ -50,7 +50,7 @@ public class GuiElementTextBase : GuiElementControl
         {
             return textUtil.GetMultilineTextHeight(Font, text, Bounds.InnerWidth - RightPadding);
         }
-
+        
         public double DrawMultilineTextAt(Context ctx, double posX, double posY, EnumTextOrientation orientation = EnumTextOrientation.Left)
         {
             Font.SetupContext(ctx);
@@ -69,18 +69,18 @@ public class GuiElementTextBase : GuiElementControl
         }
 
 
-
+        // Use this instead of the raw TextDrawUtil method to allow for child classes to override the behavior.
         /// <summary>
         /// Draws the line of text on a component.
         /// </summary>
         /// <param name="ctx">The context of the text</param>
-        /// <param name="text">The text of the text.</param>
+        /// <param name="textIn">The text of the text.</param>
         /// <param name="posX">The X Position of the text.</param>
         /// <param name="posY">The Y position of the text.</param>
-        /// <param name="textPathMode">The pathing mode.</param>
-        public void DrawTextLineAt(Context ctx, string text, double posX, double posY, bool textPathMode = false)
+        /// <param name="textPathModeIn">The pathing mode.</param>
+        public virtual void DrawTextLineAt(Context ctx, string textIn, double posX, double posY, bool textPathModeIn = false)
         {
-            textUtil.DrawTextLine(ctx, Font, text, posX, posY, textPathMode);
+            textUtil.DrawTextLine(ctx, Font, textIn, posX, posY, textPathModeIn);
         }
 
         /// <summary>

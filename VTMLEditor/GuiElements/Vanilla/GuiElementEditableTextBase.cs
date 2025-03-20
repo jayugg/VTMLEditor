@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Cairo;
 using Vintagestory.API.Client;
-using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
 
@@ -14,8 +14,8 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 {
     public delegate bool OnTryTextChangeDelegate(List<string> lines);
 
-    internal float[] caretColor = { 1, 1, 1, 1 };
-    internal float[] selectionColor = { 217f/255, 131f/255, 36f/255, 0.5f };
+    internal readonly float[] caretColor = { 1, 1, 1, 1 };
+    internal readonly float[] selectionColor = { 217f/255, 131f/255, 36f/255, 0.5f };
 
     internal bool hideCharacters;
     internal bool multilineMode;
@@ -57,30 +57,21 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     /// Contains the same as Lines, but may momentarily have different values when an edit is being made
     /// </summary>
     protected List<string> linesStaging;
+    
+    private UndoRedoManager undoRedoManager = new();
 
     public bool WordWrap = true;
 
     public List<string> GetLines() => new(lines);
 
-    public int TextLengthWithoutLineBreaks {
-        get {
-            int length = 0;
-            for (int i = 0; i < lines.Count; i++) length += lines[i].Length;
-            return length;
-        }
-    }
+    public int TextLengthWithoutLineBreaks => lines.Sum(line => line.Length);
 
     public int CaretPosWithoutLineBreaks
     {
-        get
-        {
-            int pos = 0;
-            for (int i = 0; i < CaretPosLine; i++) pos += lines[i].Length;
-            return pos + CaretPosInLine;
-        }
+        get => GetGlobalIndex(CaretPosLine, CaretPosInLine);
         set
         {
-            if (value < 0) { SetCaretPos(0, 0); return; }
+            if (value < 0) { SetCaretPos(0); return; }
 
             int sum = 0, i = 0;
             for (; i < lines.Count && sum + lines[i].Length <= value; i++)
@@ -148,25 +139,17 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         // Clamp the value to the current line length
         set => selectionEndInLine = Math.Min(value, lines[CaretPosLine].Length);
     }
-    
-    // Helper method that calculates the global index given a line and position in that line.
-    private int GetGlobalIndex(int line, int posInLine)
-    {
-        int index = 0;
-        for (int i = 0; i < line; i++) index += lines[i].Length;
-        return index + posInLine;
-    }
 
     // Read-only property for selection start index without line breaks.
-    public int SelectionStartWithoutLineBreaks => GetGlobalIndex(SelectionStartLine, SelectionStartInLine);
+    private int SelectionStartWithoutLineBreaks => GetGlobalIndex(SelectionStartLine, SelectionStartInLine);
 
     // Read-only property for selection end index without line breaks.
-    public int SelectionEndWithoutLineBreaks => GetGlobalIndex(SelectionEndLine, SelectionEndInLine);
-    
+    private int SelectionEndWithoutLineBreaks => GetGlobalIndex(SelectionEndLine, SelectionEndInLine);
+
     public int TrueSelectionStartWithoutLineBreaks => Math.Min(SelectionStartWithoutLineBreaks, SelectionEndWithoutLineBreaks);
     public int TrueSelectionEndWithoutLineBreaks => Math.Max(SelectionStartWithoutLineBreaks, SelectionEndWithoutLineBreaks);
-    
-    public ( (int line, int col) trueStart, (int line, int col) trueEnd ) GetTrueSelectionPositions()
+
+    private ( (int line, int col) trueStart, (int line, int col) trueEnd ) GetTrueSelectionPositions()
     {
         int startLine = SelectionStartLine;
         int startCol = SelectionStartInLine;
@@ -183,26 +166,9 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
     public bool HasSelection => selectionStartLine != selectionEndLine || selectionStartInLine != selectionEndInLine;
 
-    public void ClearSelection()
-    {
-        selectionStartLine = selectionEndLine = CaretPosLine;
-        selectionStartInLine = selectionEndInLine = CaretPosInLine;
-        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
-    }
-    
-    public string GetSelectedText()
-    {
-        if (!HasSelection) return "";
-        var fullText = GetText();
-        return fullText.Substring(TrueSelectionStartWithoutLineBreaks, TrueSelectionEndWithoutLineBreaks - TrueSelectionStartWithoutLineBreaks);
-    }
-
     #endregion
 
-    public override bool Focusable
-    {
-        get { return true; }
-    }
+    public override bool Focusable => true;
 
     /// <summary>
     /// Initializes the text component.
@@ -219,21 +185,117 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         lines = new List<string> { "" };
         linesStaging = new List<string> { "" };
     }
-
-    public override void OnFocusGained()
+    
+    #region Undo/Redo
+    
+    protected void SaveSnapshot(List<string> oldLines, List<string> newLines)
     {
-        base.OnFocusGained();
-        SetCaretPos(TextLengthWithoutLineBreaks);
-        OnFocused?.Invoke();
+        var delta = UndoRedoManager.ComputeDelta(string.Join("", oldLines), string.Join("", newLines));
+        undoRedoManager.SaveDelta(delta);
     }
 
-    public override void OnFocusLost()
+    public void Undo()
     {
-        base.OnFocusLost();
-        ClearSelection();
-        OnLostFocus?.Invoke();
+        var delta = undoRedoManager.Undo();
+        if (delta != null)
+        {
+            ApplyDelta(delta, true);
+        }
     }
 
+    public void Redo()
+    {
+        var delta = undoRedoManager.Redo();
+        if (delta != null)
+        {
+            ApplyDelta(delta, false);
+        }
+    }
+    
+    private void ApplyDelta(TextDelta delta, bool isUndo)
+    {
+        // Get the current full text (stored without line breaks)
+        string allText = GetText();
+        int startIndex = delta.StartIndex;
+
+        // For undo, remove the text added and reinsert the removed text.
+        // For redo, remove the text removed and reinsert the added text.
+        string expectedText = isUndo ? delta.AddedText : delta.RemovedText;
+        int deleteLength = expectedText.Length;
+        if (startIndex + deleteLength > allText.Length)
+        {
+            deleteLength = allText.Length - startIndex;
+        }
+        string insertText = isUndo ? delta.RemovedText : delta.AddedText;
+
+        // Remove expected region and insert the correct text.
+        string newText = allText.Remove(startIndex, deleteLength).Insert(startIndex, insertText);
+
+        // Update stored text lines.
+        List<string> newLines = Lineize(newText);
+        if (OnTryTextChangeText?.Invoke(newLines) == false) return;
+        lines = new List<string>(newLines);
+        linesStaging = new List<string>(newLines);
+
+        // Update caret and selection positions.
+        CaretPosWithoutLineBreaks = startIndex + insertText.Length;
+        SelectionStartInLine = SelectionEndInLine = CaretPosInLine;
+        SelectionStartLine = SelectionEndLine = CaretPosLine;
+        TextChanged();
+    }
+
+    #endregion
+    
+    public override string GetText()
+    {
+        return string.Join("", lines);
+    }
+    
+    public string GetSelectedText()
+    {
+        if (!HasSelection) return "";
+        var fullText = GetText();
+        return fullText.Substring(TrueSelectionStartWithoutLineBreaks, TrueSelectionEndWithoutLineBreaks - TrueSelectionStartWithoutLineBreaks);
+    }
+    
+    // Helper method that calculates the global index given a line and position in that line.
+    private int GetGlobalIndex(int line, int posInLine)
+    {
+        int index = 0;
+        for (int i = 0; i < line; i++) index += lines[i].Length;
+        return index + posInLine;
+    }
+
+    public List<string> Lineize(string textIn)
+    {
+        textIn ??= "";
+
+        List<string> textLines = new List<string>();
+
+        // We only allow Linux style newlines (only \n)
+        textIn = textIn.Replace("\r\n", "\n").Replace('\r', '\n');
+
+        if (multilineMode)
+        {
+            double boxWidth = Bounds.InnerWidth - 2 * Bounds.absPaddingX;
+            if (!WordWrap) boxWidth = 999999;
+
+            TextLine[] textlines = textUtil.Lineize(Font, textIn, boxWidth, EnumLinebreakBehavior.Default, true);
+            foreach (var val in textlines) textLines.Add(val.Text);
+
+            if (textLines.Count == 0)
+            {
+                textLines.Add("");
+            }
+        }
+        else
+        {
+            textLines.Add(textIn);
+        }
+
+        return textLines;
+    }
+    
     /// <summary>
     /// Sets the position of the cursor at a given point.
     /// </summary>
@@ -242,11 +304,9 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     public void SetCaretPos(double x, double y)
     {
         CaretPosLine = 0;
-
         ImageSurface surface = new ImageSurface(Format.Argb32, 1, 1);
         Context ctx = genContext(surface);
         Font.SetupContext(ctx);
-
         if (multilineMode)
         {
             double lineY = y / ctx.FontExtents.Height;
@@ -262,10 +322,8 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
             CaretPosLine = Math.Max(0, (int)lineY);
         }
-
         string line = lines[CaretPosLine].TrimEnd('\r', '\n');
         CaretPosInLine = line.Length;
-
         for (int i = 0; i < line.Length; i++)
         {
             double posx = ctx.TextExtents(line.Substring(0, i+1)).XAdvance;
@@ -276,14 +334,10 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 break;
             }
         }
-
         ctx.Dispose();
         surface.Dispose();
-
         SetCaretPos(CaretPosInLine, CaretPosLine);
     }
-
-
    
     /// <summary>
     /// Sets the position of the cursor to a specific character.
@@ -345,15 +399,15 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     /// <summary>
     /// Sets given text, sets the cursor to the end of the text
     /// </summary>
-    /// <param name="text"></param>
+    /// <param name="textIn"></param>
     /// <param name="setCaretPosToEnd"></param>
-    public void SetValue(string text, bool setCaretPosToEnd = true)
+    public void SetValue(string textIn, bool setCaretPosToEnd = true)
     {
-        LoadValue(Lineize(text));
+        LoadValue(Lineize(textIn));
 
         if (setCaretPosToEnd)
         {
-            var endLine = lines[lines.Count - 1];
+            var endLine = lines[^1];
             var endPos = endLine.Length;
             SetCaretPos(endPos, lines.Count - 1);
         }
@@ -372,140 +426,140 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
             linesStaging = new List<string>(lines);
             return;
         }
-
+        SaveSnapshot(lines, newLines);
         lines = new List<string>(newLines);
         linesStaging = new List<string>(lines);
-        
         TextChanged();
     }
-
-    public List<string> Lineize(string text)
+    
+    public void ClearSelection()
     {
-        if (text == null) text = "";
+        selectionStartLine = selectionEndLine = CaretPosLine;
+        selectionStartInLine = selectionEndInLine = CaretPosInLine;
+        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
+    }
+    
+    /// <summary>
+    /// Inserts text at the current caret position. If there is a selection, the selected text is replaced.
+    /// </summary>
+    /// <param name="insert"> The text to insert. </param>
+    public void InsertTextAtCursor(string insert)
+    {
+        string fulltext = GetText();
+        int newCaretPos;
 
-        List<string> lines = new List<string>();
-
-        // We only allow Linux style newlines (only \n)
-        text = text.Replace("\r\n", "\n").Replace('\r', '\n');
-
-        if (multilineMode)
+        // If there is a selection, replace the selected text
+        if (HasSelection)
         {
-            double boxWidth = Bounds.InnerWidth - 2 * Bounds.absPaddingX;
-            if (!WordWrap) boxWidth = 999999;
-
-            TextLine[] textlines = textUtil.Lineize(Font, text, boxWidth, EnumLinebreakBehavior.Default, true);
-            foreach (var val in textlines) lines.Add(val.Text);
-
-            if (lines.Count == 0)
-            {
-                lines.Add("");
-            }
+            int start = SelectionStartWithoutLineBreaks;
+            int end = SelectionEndWithoutLineBreaks;
+            fulltext = fulltext[..start] + insert + fulltext[end..];
+            newCaretPos = start + insert.Length;
         }
         else
         {
-            lines.Add(text);
+            int caretPos = CaretPosWithoutLineBreaks;
+            fulltext = fulltext[..caretPos] + insert + fulltext[caretPos..];
+            newCaretPos = caretPos + insert.Length;
         }
 
-        return lines;
+        // Update the text and move the caret to the new position
+        SetValue(fulltext);
+        CaretPosWithoutLineBreaks = newCaretPos;
+        ClearSelection();
     }
 
+    private void DeleteSelection()
+    {
+        if (!HasSelection) return;
+        int start = TrueSelectionStartWithoutLineBreaks;
+        int end = TrueSelectionEndWithoutLineBreaks;
+        string fulltext = GetText();
+        fulltext = fulltext.Substring(0, start) + fulltext.Substring(end);
+        LoadValue(Lineize(fulltext));
+        // Set caret to the selection start position after deletion.
+        CaretPosWithoutLineBreaks = start;
+        ClearSelection();
+    }
+    
+    /// <summary>
+    /// Sets the number of lines in the Text Area.
+    /// </summary>
+    /// <param name="maxLines">The maximum number of lines.</param>
+    public void SetMaxLines(int maxLines)
+    {
+        this.maxlines = maxLines;
+    }
+    
+    public void SetMaxHeight(int maxheight)
+    {
+        var fontExt = Font.GetFontExtents();
+        this.maxlines = (int)Math.Floor(maxheight / fontExt.Height);
+    }
 
+    /// <summary>
+    /// Moves the cursor forward and backward by an amount.
+    /// </summary>
+    /// <param name="dir">The direction to move the cursor.</param>
+    /// <param name="wholeWord">Whether we skip entire words moving it.</param>
+    public void MoveCursor(int dir, bool wholeWord = false)
+    {
+        bool done = false;
+        bool moved = 
+                ((CaretPosInLine > 0 || CaretPosLine > 0) && dir < 0) ||
+                ((CaretPosInLine < lines[CaretPosLine].Length || CaretPosLine < lines.Count-1) && dir > 0)
+            ;
+
+        int newPos = CaretPosInLine;
+        int newLine = CaretPosLine;
+
+        while (!done) {
+            newPos += dir;
+
+            if (newPos < 0)
+            {
+                if (newLine <= 0) break;
+                newLine--;
+                newPos = lines[newLine].TrimEnd('\r', '\n').Length;
+            } 
+
+            if (newPos > lines[newLine].TrimEnd('\r', '\n').Length)
+            {
+                if (newLine >= lines.Count - 1) break;
+                newPos = 0;
+                newLine++;
+            }
+
+            done = !wholeWord || (newPos > 0 && lines[newLine][newPos - 1] == ' ');
+        }
+
+        if (!moved) return;
+        SetCaretPos(newPos, newLine);
+        SelectionEndLine = CaretPosLine;
+        SelectionEndInLine = CaretPosInLine;
+        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
+        api.Gui.PlaySound("tick");
+    }
+    
     internal virtual void TextChanged()
     {
         OnTextChanged?.Invoke(string.Join("", lines));
         RecomposeText();
     }
-
-    internal virtual void RecomposeText()
+    
+    public override void OnFocusGained()
     {
-        Bounds.CalcWorldBounds();
-
-        string displayedText = null;
-        ImageSurface surface;
-
-        if (multilineMode) {
-            textSize.X = (int)(Bounds.OuterWidth - rightSpacing);
-            textSize.Y = (int)(Bounds.OuterHeight - bottomSpacing);
-            
-        } else {
-            displayedText = lines[0];
-
-            if (hideCharacters)
-            {
-                displayedText = new StringBuilder(displayedText.Length).Insert(0, "•", displayedText.Length).ToString();
-            }
-
-            textSize.X = (int)Math.Max(Bounds.InnerWidth - rightSpacing, Font.GetTextExtents(displayedText).Width);
-            textSize.Y = (int)(Bounds.InnerHeight - bottomSpacing);
-        }
-
-        surface = new ImageSurface(Format.Argb32, textSize.X, textSize.Y);
-
-        Context ctx = genContext(surface);
-        Font.SetupContext(ctx);
-
-        double fontHeight = ctx.FontExtents.Height;
-        
-        if (multilineMode)
-        {
-            double width = Bounds.InnerWidth - 2 * Bounds.absPaddingX - rightSpacing;
-
-            TextLine[] textlines = new TextLine[lines.Count];
-            for (int i = 0; i < textlines.Length; i++)
-            {
-                textlines[i] = new TextLine()
-                {
-                    Text = lines[i].Replace("\r\n", "").Replace("\n", ""),
-                    Bounds = new LineRectangled(0, i*fontHeight, Bounds.InnerWidth, fontHeight)
-                };
-            }
-
-            textUtil.DrawMultilineTextAt(ctx, Font, textlines, Bounds.absPaddingX + leftPadding, Bounds.absPaddingY, width, EnumTextOrientation.Left);
-        } else
-        {
-            this.topPadding = Math.Max(0, Bounds.OuterHeight - bottomSpacing - ctx.FontExtents.Height) / 2;
-            textUtil.DrawTextLine(ctx, Font, displayedText, Bounds.absPaddingX + leftPadding, Bounds.absPaddingY + this.topPadding);
-        }
-
-
-        generateTexture(surface, ref textTexture);
-        ctx.Dispose();
-        surface.Dispose();
-
-        if (caretTexture.TextureId == 0)
-        {
-            caretHeight = fontHeight;
-            surface = new ImageSurface(Format.Argb32, (int)3.0, (int)fontHeight);
-            ctx = genContext(surface);
-            Font.SetupContext(ctx);
-
-            ctx.SetSourceRGBA(caretColor[0], caretColor[1], caretColor[2], caretColor[3]);
-            ctx.LineWidth = 1;
-            ctx.NewPath();
-            ctx.MoveTo(2, 0);
-            ctx.LineTo(2, fontHeight);
-            ctx.ClosePath();
-            ctx.Stroke();
-
-            generateTexture(surface, ref caretTexture.TextureId);
-
-            ctx.Dispose();
-            surface.Dispose();
-        }
-        if (selectionTexture.TextureId == 0)
-        {
-            surface = new ImageSurface(Format.Argb32, 1, 1);
-            ctx = genContext(surface);
-            Font.SetupContext(ctx);
-            ctx.SetSourceRGBA(selectionColor[0], selectionColor[1], selectionColor[2], selectionColor[3]);
-            ctx.Rectangle(0, 0, 1, 1);
-            ctx.Fill();
-            generateTexture(surface, ref selectionTexture.TextureId);
-            ctx.Dispose();
-            surface.Dispose();
-        }
+        base.OnFocusGained();
+        SetCaretPos(TextLengthWithoutLineBreaks);
+        OnFocused?.Invoke();
     }
 
+    public override void OnFocusLost()
+    {
+        base.OnFocusLost();
+        ClearSelection();
+        OnLostFocus?.Invoke();
+    }
 
     #region Mouse, Keyboard
 
@@ -562,6 +616,7 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 else if (CaretPosWithoutLineBreaks > 0 || HasSelection) OnKeyBackSpace();
                 break;
             case (int)GlKeys.Delete:
+                if (args.CtrlPressed) OnCtrlDelete();
                 if (CaretPosWithoutLineBreaks < TextLengthWithoutLineBreaks) OnKeyDelete();
                 break;
             case (int)GlKeys.End:
@@ -585,27 +640,43 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 UpdateSelectionOnKeyDown(args);
                 break;
             case (int)GlKeys.Down when CaretPosLine < lines.Count - 1:
-                SetCaretPos(CaretPosInLine, CaretPosLine + 1);
+                if (args.CtrlPressed) SetCaretPos(caretX, caretY + Font.GetFontExtents().Height);
+                else SetCaretPos(CaretPosInLine, CaretPosLine + 1);
                 UpdateSelectionOnKeyDown(args);
                 capi.Gui.PlaySound("tick");
                 break;
             case (int)GlKeys.Up when CaretPosLine > 0:
-                SetCaretPos(CaretPosInLine, CaretPosLine - 1);
+                if (args.CtrlPressed) SetCaretPos(caretX, caretY - Font.GetFontExtents().Height);
+                else SetCaretPos(CaretPosInLine, CaretPosLine - 1);
                 UpdateSelectionOnKeyDown(args);
                 capi.Gui.PlaySound("tick");
                 break;
-            case (int)GlKeys.V when (args.CtrlPressed || args.CommandPressed):
+            case (int)GlKeys.A when args.CtrlPressed || args.CommandPressed:
+                SetCaretPos(lines[^1].Length, lines.Count - 1);
+                SelectionStartLine = 0;
+                SelectionStartInLine = 0;
+                SelectionEndLine = CaretPosLine;
+                SelectionEndInLine = CaretPosInLine;
+                break;
+            case (int)GlKeys.V when args.CtrlPressed || args.CommandPressed:
                 OnPaste(capi);
                 break;
-            case (int)GlKeys.C when (args.CtrlPressed || args.CommandPressed):
+            case (int)GlKeys.C when args.CtrlPressed || args.CommandPressed:
                 OnCopy(capi);
                 break;
-            case (int)GlKeys.X when (args.CtrlPressed || args.CommandPressed):
+            case (int)GlKeys.X when args.CtrlPressed || args.CommandPressed:
                 OnCopy(capi);
                 DeleteSelection();
                 break;
+            case (int)GlKeys.Y when args.CtrlPressed || args.CommandPressed:
+            case (int)GlKeys.Z when (args.CtrlPressed || args.CommandPressed) && args.ShiftPressed:
+                Redo();
+                break;
+            case (int)GlKeys.Z when args.CtrlPressed || args.CommandPressed:
+                Undo();
+                break;
             case (int)GlKeys.Tab:
-                InsertTextAtCurrentSel("    ");
+                InsertTextAtCursor("    ");
                 break;
             case (int)GlKeys.Enter:
             case (int)GlKeys.KeypadEnter:
@@ -630,34 +701,8 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     {
         string insert = capi.Forms.GetClipboardText();
         insert = insert.Replace("\uFEFF", ""); // Remove UTF-8 BOM if present
-        InsertTextAtCurrentSel(insert);
+        InsertTextAtCursor(insert);
         capi.Gui.PlaySound("tick");
-    }
-
-    private void InsertTextAtCurrentSel(string insert)
-    {
-        string fulltext = GetText();
-        int newCaretPos;
-
-        // If there is a selection, replace the selected text
-        if (HasSelection)
-        {
-            int start = SelectionStartWithoutLineBreaks;
-            int end = SelectionEndWithoutLineBreaks;
-            fulltext = fulltext.Substring(0, start) + insert + fulltext.Substring(end);
-            newCaretPos = start + insert.Length;
-        }
-        else
-        {
-            int caretPos = CaretPosWithoutLineBreaks;
-            fulltext = fulltext.Substring(0, caretPos) + insert + fulltext.Substring(caretPos);
-            newCaretPos = caretPos + insert.Length;
-        }
-
-        // Update the text and move the caret to the new position
-        SetValue(fulltext);
-        CaretPosWithoutLineBreaks = newCaretPos;
-        ClearSelection();
     }
 
     private void UpdateSelectionOnKeyDown(KeyEvent args)
@@ -676,44 +721,21 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
     }
 
-    public override string GetText()
-    {
-        return string.Join("", lines);
-    }
-
     private void OnKeyEnter()
     {
         // If there is an active selection, remove it first.
         if (HasSelection) DeleteSelection();
-
         if (lines.Count >= maxlines) return;
 
-        string leftText = linesStaging[CaretPosLine].Substring(0, CaretPosInLine);
-        string rightText = linesStaging[CaretPosLine].Substring(CaretPosInLine);
+        string leftText = linesStaging[CaretPosLine][..CaretPosInLine];
+        string rightText = linesStaging[CaretPosLine][CaretPosInLine..];
 
         linesStaging[CaretPosLine] = leftText + "\n";
         linesStaging.Insert(CaretPosLine + 1, rightText);
-
-        if (OnTryTextChangeText?.Invoke(linesStaging) == false) return;
-
-        lines = new List<string>(linesStaging);
-
-        TextChanged();
+        
+        LoadValue(linesStaging);
         SetCaretPos(0, CaretPosLine + 1);
         api.Gui.PlaySound("tick");
-    }
-
-    private void DeleteSelection()
-    {
-        if (!HasSelection) return;
-        int start = TrueSelectionStartWithoutLineBreaks;
-        int end = TrueSelectionEndWithoutLineBreaks;
-        string fulltext = GetText();
-        fulltext = fulltext.Substring(0, start) + fulltext.Substring(end);
-        LoadValue(Lineize(fulltext));
-        // Set caret to the selection start position after deletion.
-        CaretPosWithoutLineBreaks = start;
-        ClearSelection();
     }
 
     private void OnKeyDelete()
@@ -725,23 +747,25 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
             var caret = CaretPosWithoutLineBreaks;
             if (alltext.Length == caret) return;
 
-            alltext = alltext.Substring(0, caret) + alltext.Substring(caret + 1, alltext.Length - caret - 1);
-            LoadValue(Lineize(alltext));
+            alltext = alltext[..caret] + alltext.Substring(caret + 1, alltext.Length - caret - 1);
+            var newLines = Lineize(alltext);
+            LoadValue(newLines);
         }
         api.Gui.PlaySound("tick");
     }
     
     private void OnCtrlBackspace()
     {
-        string text = GetText();
+        if (HasSelection) DeleteSelection();
+        string allText = GetText();
         int caret = CaretPosWithoutLineBreaks;
         if (caret == 0) return;
         int start = caret - 1;
         // If the character immediately before the caret is whitespace,
         // move backward until non-whitespace is found.
-        if (char.IsWhiteSpace(text[start]))
+        if (char.IsWhiteSpace(allText[start]))
         {
-            while (start >= 0 && char.IsWhiteSpace(text[start]))
+            while (start >= 0 && char.IsWhiteSpace(allText[start]))
             {
                 start--;
             }
@@ -749,16 +773,47 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         else
         {
             // Otherwise, move backward until whitespace is found.
-            while (start >= 0 && !char.IsWhiteSpace(text[start]))
+            while (start >= 0 && !char.IsWhiteSpace(allText[start]))
             {
                 start--;
             }
         }
         int deleteStart = start + 1; // word boundary found
         // Remove the word preceding the caret.
-        string newText = text.Substring(0, deleteStart) + text.Substring(caret);
+        string newText = allText[..deleteStart] + allText[caret..];
         LoadValue(Lineize(newText));
         CaretPosWithoutLineBreaks = deleteStart;
+        api.Gui.PlaySound("tick");
+    }
+
+    private void OnCtrlDelete()
+    {
+        if (HasSelection) DeleteSelection();
+        string allText = GetText();
+        int caret = CaretPosWithoutLineBreaks;
+        if (caret == allText.Length) return;
+        int start = caret;
+        // If the character immediately after the caret is whitespace,
+        // move forward until non-whitespace is found.
+        if (char.IsWhiteSpace(allText[start]))
+        {
+            while (start < allText.Length && char.IsWhiteSpace(allText[start]))
+            {
+                start++;
+            }
+        }
+        else
+        {
+            // Otherwise, move forward until whitespace is found.
+            while (start < allText.Length && !char.IsWhiteSpace(allText[start]))
+            {
+                start++;
+            }
+        }
+        int deleteEnd = start; // word boundary found
+        // Remove the word following the caret.
+        string newText = allText.Substring(0, caret) + allText.Substring(deleteEnd);
+        LoadValue(Lineize(newText));
         api.Gui.PlaySound("tick");
     }
 
@@ -817,7 +872,106 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
     #endregion
 
+    internal virtual void RecomposeText()
+    {
+        Bounds.CalcWorldBounds();
 
+        string displayedText = "";
+
+        if (multilineMode) {
+            textSize.X = (int)(Bounds.OuterWidth - rightSpacing);
+            textSize.Y = (int)(Bounds.OuterHeight - bottomSpacing);
+            
+        } else {
+            displayedText = lines[0];
+
+            if (hideCharacters)
+            {
+                displayedText = new StringBuilder(displayedText.Length).Insert(0, "•", displayedText.Length).ToString();
+            }
+
+            textSize.X = (int)Math.Max(Bounds.InnerWidth - rightSpacing, Font.GetTextExtents(displayedText).Width);
+            textSize.Y = (int)(Bounds.InnerHeight - bottomSpacing);
+        }
+
+        var surface = new ImageSurface(Format.Argb32, textSize.X, textSize.Y);
+
+        Context ctx = genContext(surface);
+        Font.SetupContext(ctx);
+
+        double fontHeight = ctx.FontExtents.Height;
+        
+        if (multilineMode)
+        {
+            double width = Bounds.InnerWidth - 2 * Bounds.absPaddingX - rightSpacing;
+            this.RenderMultilineText(ctx, this.Bounds.absPaddingX + this.leftPadding, this.Bounds.absPaddingY, fontHeight, width);
+        } else
+        {
+            this.topPadding = Math.Max(0, Bounds.OuterHeight - bottomSpacing - fontHeight) / 2;
+            this.DrawTextLineAt(ctx, displayedText, Bounds.absPaddingX + leftPadding, Bounds.absPaddingY + this.topPadding);
+        }
+
+
+        generateTexture(surface, ref textTexture);
+        ctx.Dispose();
+        surface.Dispose();
+
+        if (caretTexture.TextureId == 0)
+        {
+            caretHeight = fontHeight;
+            surface = new ImageSurface(Format.Argb32, (int)3.0, (int)fontHeight);
+            ctx = genContext(surface);
+            Font.SetupContext(ctx);
+
+            ctx.SetSourceRGBA(caretColor[0], caretColor[1], caretColor[2], caretColor[3]);
+            ctx.LineWidth = 1;
+            ctx.NewPath();
+            ctx.MoveTo(2, 0);
+            ctx.LineTo(2, fontHeight);
+            ctx.ClosePath();
+            ctx.Stroke();
+
+            generateTexture(surface, ref caretTexture.TextureId);
+
+            ctx.Dispose();
+            surface.Dispose();
+        }
+        if (selectionTexture.TextureId == 0)
+        {
+            surface = new ImageSurface(Format.Argb32, 1, 1);
+            ctx = genContext(surface);
+            Font.SetupContext(ctx);
+            ctx.SetSourceRGBA(selectionColor[0], selectionColor[1], selectionColor[2], selectionColor[3]);
+            ctx.Rectangle(0, 0, 1, 1);
+            ctx.Fill();
+            generateTexture(surface, ref selectionTexture.TextureId);
+            ctx.Dispose();
+            surface.Dispose();
+        }
+    }
+    
+    /// <summary>
+    /// Renders the text in a multiline format. Virtual to allow for overriding. (e.g. for custom text rendering)
+    /// </summary>
+    /// <param name="ctx">The context of the text</param>
+    /// <param name="paddingX">X padding</param>
+    /// <param name="paddingY">Y padding</param>
+    /// <param name="fontHeight">Font height</param>
+    /// <param name="width">Line width</param>
+    public virtual void RenderMultilineText(Context ctx, double paddingX, double paddingY, double fontHeight, double width)
+    {
+        TextLine[] textlines = new TextLine[lines.Count];
+        for (int i = 0; i < textlines.Length; i++)
+        {
+            textlines[i] = new TextLine()
+            {
+                Text = lines[i].Replace("\r\n", "").Replace("\n", ""),
+                Bounds = new LineRectangled(0, i*fontHeight, Bounds.InnerWidth, fontHeight)
+            };
+        }
+        this.textUtil.DrawMultilineTextAt(ctx, this.Font, textlines, paddingX, paddingY, width);
+    }
+    
     public override void RenderInteractiveElements(float deltaTime)
     {
         if (!HasFocus) return;
@@ -828,7 +982,7 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
             for (int i = selStartLine; i <= selEndLine && i < lines.Count; i++)
             {
                 double lineY = Bounds.renderY + topPadding + i * Font.GetFontExtents().Height;
-                double lineHeight = Font.GetFontExtents().Ascent + Font.GetFontExtents().Descent;
+                double lineHeight = Font.GetFontExtents().Height;
                 string lineText = lines[i];
 
                 double selStartX, selEndX;
@@ -881,67 +1035,6 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         caretTexture.Dispose();
         textTexture.Dispose();
         selectionTexture.Dispose();
-    }
-
-
-    /// <summary>
-    /// Moves the cursor forward and backward by an amount.
-    /// </summary>
-    /// <param name="dir">The direction to move the cursor.</param>
-    /// <param name="wholeWord">Whether or not we skip entire words moving it.</param>
-    public void MoveCursor(int dir, bool wholeWord = false)
-    {
-        bool done = false;
-        bool moved = 
-            ((CaretPosInLine > 0 || CaretPosLine > 0) && dir < 0) ||
-            ((CaretPosInLine < lines[CaretPosLine].Length || CaretPosLine < lines.Count-1) && dir > 0)
-        ;
-
-        int newPos = CaretPosInLine;
-        int newLine = CaretPosLine;
-
-        while (!done) {
-            newPos += dir;
-
-            if (newPos < 0)
-            {
-                if (newLine <= 0) break;
-                newLine--;
-                newPos = lines[newLine].TrimEnd('\r', '\n').Length;
-            } 
-
-            if (newPos > lines[newLine].TrimEnd('\r', '\n').Length)
-            {
-                if (newLine >= lines.Count - 1) break;
-                newPos = 0;
-                newLine++;
-            }
-
-            done = !wholeWord || (newPos > 0 && lines[newLine][newPos - 1] == ' ');
-        }
-
-        if (moved)
-        {
-            SetCaretPos(newPos, newLine);
-            SelectionEndLine = CaretPosLine;
-            SelectionEndInLine = CaretPosInLine;
-            OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
-            api.Gui.PlaySound("tick");
-        }
-    }
-
-    /// <summary>
-    /// Sets the number of lines in the Text Area.
-    /// </summary>
-    /// <param name="maxlines">The maximum number of lines.</param>
-    public void SetMaxLines(int maxlines)
-    {
-        this.maxlines = maxlines;
-    }
-    
-    public void SetMaxHeight(int maxheight)
-    {
-        var fontExt = Font.GetFontExtents();
-        this.maxlines = (int)Math.Floor(maxheight / fontExt.Height);
+        undoRedoManager.Dispose();
     }
 }
