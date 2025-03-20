@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Cairo;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
 
@@ -14,7 +15,7 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     public delegate bool OnTryTextChangeDelegate(List<string> lines);
 
     internal float[] caretColor = { 1, 1, 1, 1 };
-    internal float[] selectionColor = { 0.5f, 0.5f, 1, 0.5f };
+    internal float[] selectionColor = { 217f/255, 131f/255, 36f/255, 0.5f };
 
     internal bool hideCharacters;
     internal bool multilineMode;
@@ -127,77 +128,30 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     {
         // If there is no selection, the start is the same as the end and is at the caret position
         get => HasSelection ? selectionStartLine : CaretPosLine;
-        set
-        {
-            // If the value is greater than the end, swap the start and end
-            if (value > selectionEndLine)
-            {
-                (selectionStartLine, selectionEndLine) = (selectionEndLine, value);
-                (selectionStartInLine, selectionEndInLine) = (selectionEndInLine, selectionStartInLine);
-            }
-            else
-            {
-                selectionStartLine = value;
-            }
-        }
+        set => selectionStartLine = value;
     }
 
     public int SelectionStartInLine
     {
+        // If there is no selection, the end is the same as the start and is at the caret position
         get => HasSelection ? selectionStartInLine : CaretPosInLine;
-        set
-        {
-            // Ensure value is within the current line length
-            int clampedValue = Math.Min(value, lines[CaretPosLine].Length);
-            // If the position is greater than the end, swap the start and end
-            if (selectionStartLine == selectionEndLine && clampedValue > selectionEndInLine)
-            {
-                (selectionStartInLine, selectionEndInLine) = (selectionEndInLine, clampedValue);
-            }
-            else
-            {
-                selectionStartInLine = clampedValue;
-            }
-        }
+        // Clamp the value to the current line length
+        set => selectionStartInLine = Math.Min(value, lines[CaretPosLine].Length);
     }
 
     public int SelectionEndLine
     {
         // If there is no selection, the end is the same as the start and is at the caret position
         get => HasSelection ? selectionEndLine : CaretPosLine;
-        set
-        {
-            // If the value is less than the start, swap the start and end
-            if (value < selectionStartLine)
-            {
-                (selectionStartLine, selectionEndLine) = (value, selectionStartLine);
-                (selectionStartInLine, selectionEndInLine) = (selectionEndInLine, selectionStartInLine);
-            }
-            else
-            {
-                selectionEndLine = value;
-            }
-        }
+        set => selectionEndLine = value;
     }
 
     public int SelectionEndInLine
     {
         // If there is no selection, the end is the same as the start and is at the caret position
         get => HasSelection ? selectionEndInLine : CaretPosInLine;
-        set
-        {
-            // Clamp the value to the current line length
-            int clampedValue = Math.Min(value, lines[CaretPosLine].Length);
-            // If the position is less than the start, swap the start and end
-            if (selectionStartLine == selectionEndLine && clampedValue < selectionStartInLine)
-            {
-                (selectionStartInLine, selectionEndInLine) = (clampedValue, selectionStartInLine);
-            }
-            else
-            {
-                selectionEndInLine = clampedValue;
-            }
-        }
+        // Clamp the value to the current line length
+        set => selectionEndInLine = Math.Min(value, lines[CaretPosLine].Length);
     }
     
     // Helper method that calculates the global index given a line and position in that line.
@@ -213,6 +167,24 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
     // Read-only property for selection end index without line breaks.
     public int SelectionEndWithoutLineBreaks => GetGlobalIndex(SelectionEndLine, SelectionEndInLine);
+    
+    public int TrueSelectionStartWithoutLineBreaks => Math.Min(SelectionStartWithoutLineBreaks, SelectionEndWithoutLineBreaks);
+    public int TrueSelectionEndWithoutLineBreaks => Math.Max(SelectionStartWithoutLineBreaks, SelectionEndWithoutLineBreaks);
+    
+    public ( (int line, int col) trueStart, (int line, int col) trueEnd ) GetTrueSelectionPositions()
+    {
+        int startLine = SelectionStartLine;
+        int startCol = SelectionStartInLine;
+        int endLine = SelectionEndLine;
+        int endCol = SelectionEndInLine;
+
+        if (startLine > endLine || (startLine == endLine && startCol > endCol))
+        {
+            // Swap the start with the end if the values are in reverse order.
+            return ((endLine, endCol), (startLine, startCol));
+        }
+        return ((startLine, startCol), (endLine, endCol));
+    }
 
     public bool HasSelection => selectionStartLine != selectionEndLine || selectionStartInLine != selectionEndInLine;
 
@@ -220,22 +192,14 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     {
         selectionStartLine = selectionEndLine = CaretPosLine;
         selectionStartInLine = selectionEndInLine = CaretPosInLine;
+        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
     }
     
     public string GetSelectedText()
     {
         if (!HasSelection) return "";
-        
-        StringBuilder selectedText = new StringBuilder();
-        for (var i = SelectionStartLine; i <= SelectionEndLine; i++)
-        {
-            var line = lines[i];
-            int start = i == SelectionStartLine ? Math.Min(SelectionStartInLine, line.Length) : 0;
-            int end = i == SelectionEndLine ? Math.Min(SelectionEndInLine, line.Length) : line.Length;
-            selectedText.Append(line.AsSpan(start, end - start));
-        }
-
-        return selectedText.ToString();
+        var fullText = GetText();
+        return fullText.Substring(TrueSelectionStartWithoutLineBreaks, TrueSelectionEndWithoutLineBreaks - TrueSelectionStartWithoutLineBreaks);
     }
 
     #endregion
@@ -535,13 +499,10 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         }
         if (selectionTexture.TextureId == 0)
         {
-            // Create a 1x1 pixel image instead of a stroked line
             surface = new ImageSurface(Format.Argb32, 1, 1);
             ctx = genContext(surface);
             Font.SetupContext(ctx);
-            // Set the source using the selection color
             ctx.SetSourceRGBA(selectionColor[0], selectionColor[1], selectionColor[2], selectionColor[3]);
-            // Fill the entire surface
             ctx.Rectangle(0, 0, 1, 1);
             ctx.Fill();
             generateTexture(surface, ref selectionTexture.TextureId);
@@ -553,30 +514,41 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
     #region Mouse, Keyboard
 
-
     public override void OnMouseDownOnElement(ICoreClientAPI capi, MouseEvent args)
     {
         base.OnMouseDownOnElement(capi, args);
         SetCaretPos(args.X - Bounds.absX, args.Y - Bounds.absY);
-        if (capi.Input.IsHotKeyPressed("shift"))
+        // Only reset selection anchor if shift is NOT pressed.
+        if (!capi.Input.IsHotKeyPressed("shift"))
         {
-            SelectionEndLine = CaretPosLine;
-            SelectionEndInLine = CaretPosInLine;
+            SelectionStartLine = CaretPosLine;
+            SelectionStartInLine = CaretPosInLine;
         }
-        else
-        {
-            SelectionStartLine = SelectionEndLine = CaretPosLine;
-            SelectionStartInLine = SelectionEndInLine = CaretPosInLine;
-        }
+        // Always update the selection end.
+        SelectionEndLine = CaretPosLine;
+        SelectionEndInLine = CaretPosInLine;
+        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
     }
 
     public override void OnMouseUpOnElement(ICoreClientAPI capi, MouseEvent args)
     {
         base.OnMouseUpOnElement(capi, args);
         SetCaretPos(args.X - Bounds.absX, args.Y - Bounds.absY);
-        if (capi.Input.IsHotKeyPressed("shift")) return;
+        // Always update the selection end on mouse up.
         SelectionEndLine = CaretPosLine;
         SelectionEndInLine = CaretPosInLine;
+        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
+    }
+    
+    public override void OnMouseMove(ICoreClientAPI capi, MouseEvent args)
+    {
+        // Use capi.Input.MouseButton.Left because args.Button does not seem to work
+        if (args.Handled || !HasFocus || !capi.Input.MouseButton.Left ) return;
+        SetCaretPos(args.X - Bounds.absX, args.Y - Bounds.absY);
+        SelectionEndLine = CaretPosLine;
+        SelectionEndInLine = CaretPosInLine;
+        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
+        args.Handled = true;
     }
 
     public override void OnKeyDown(ICoreClientAPI capi, KeyEvent args)
@@ -587,42 +559,27 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
         switch (args.KeyCode)
         {
+            case (int)GlKeys.LShift:
+                handled = false;
+                break;
             case (int)GlKeys.BackSpace:
-            {
                 if (CaretPosWithoutLineBreaks > 0) OnKeyBackSpace();
                 break;
-            }
             case (int)GlKeys.Delete:
-            {
                 if (CaretPosWithoutLineBreaks < TextLengthWithoutLineBreaks) OnKeyDelete();
                 break;
-            }
             case (int)GlKeys.End:
-            {
-                if (args.CtrlPressed)
-                {
-                    SetCaretPos(lines[^1].TrimEnd('\r', '\n').Length, lines.Count - 1);
-                } else
-                {
-                    SetCaretPos(lines[CaretPosLine].TrimEnd('\r', '\n').Length, CaretPosLine);
-                }
+                if (args.CtrlPressed) SetCaretPos(lines[^1].TrimEnd('\r', '\n').Length, lines.Count - 1);
+                else SetCaretPos(lines[CaretPosLine].TrimEnd('\r', '\n').Length, CaretPosLine);
                 UpdateSelectionOnKeyDown(args);
                 capi.Gui.PlaySound("tick");
                 break;
-            }
             case (int)GlKeys.Home:
-            {
-                if (args.CtrlPressed)
-                {
-                    SetCaretPos(0);
-                } else
-                {
-                    SetCaretPos(0, CaretPosLine);
-                }
+                if (args.CtrlPressed) SetCaretPos(0);
+                else SetCaretPos(0, CaretPosLine);
                 UpdateSelectionOnKeyDown(args);
                 capi.Gui.PlaySound("tick");
                 break;
-            }
             case (int)GlKeys.Left:
                 MoveCursor(-1, args.CtrlPressed);
                 UpdateSelectionOnKeyDown(args);
@@ -631,16 +588,6 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 MoveCursor(1, args.CtrlPressed);
                 UpdateSelectionOnKeyDown(args);
                 break;
-            case (int)GlKeys.V when (args.CtrlPressed || args.CommandPressed):
-            {
-                OnPaste(capi);
-                break;
-            }
-            case (int)GlKeys.C when (args.CtrlPressed || args.CommandPressed):
-            {
-                OnCopy(capi);
-                break;
-            }
             case (int)GlKeys.Down when CaretPosLine < lines.Count - 1:
                 SetCaretPos(CaretPosInLine, CaretPosLine + 1);
                 UpdateSelectionOnKeyDown(args);
@@ -651,23 +598,28 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 UpdateSelectionOnKeyDown(args);
                 capi.Gui.PlaySound("tick");
                 break;
+            case (int)GlKeys.V when (args.CtrlPressed || args.CommandPressed):
+                OnPaste(capi);
+                break;
+            case (int)GlKeys.C when (args.CtrlPressed || args.CommandPressed):
+                OnCopy(capi);
+                break;
+            case (int)GlKeys.X when (args.CtrlPressed || args.CommandPressed):
+                OnCopy(capi);
+                DeleteSelection();
+                break;
+            case (int)GlKeys.Tab:
+                InsertTextAtCurrentSel("    ");
+                break;
             case (int)GlKeys.Enter:
             case (int)GlKeys.KeypadEnter:
-            {
-                if (multilineMode)
-                {
-                    OnKeyEnter();
-                } else
-                {
-                    handled = false;
-                }
+                if (multilineMode) OnKeyEnter();
+                else handled = false;
                 break;
-            }
             case (int)GlKeys.Escape:
                 handled = false;
                 break;
         }
-
         args.Handled = handled;
     }
 
@@ -682,7 +634,12 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     {
         string insert = capi.Forms.GetClipboardText();
         insert = insert.Replace("\uFEFF", ""); // Remove UTF-8 BOM if present
+        InsertTextAtCurrentSel(insert);
+        capi.Gui.PlaySound("tick");
+    }
 
+    private void InsertTextAtCurrentSel(string insert)
+    {
         string fulltext = GetText();
         int newCaretPos;
 
@@ -705,8 +662,6 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         SetValue(fulltext);
         CaretPosWithoutLineBreaks = newCaretPos;
         ClearSelection();
-    
-        capi.Gui.PlaySound("tick");
     }
 
     private void UpdateSelectionOnKeyDown(KeyEvent args)
@@ -722,6 +677,7 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
             // Otherwise, collapse any active selection.
             ClearSelection();
         }
+        OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
     }
 
     public override string GetText()
@@ -753,10 +709,9 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
     private void DeleteSelection()
     {
-        int start = SelectionStartWithoutLineBreaks;
-        int end = SelectionEndWithoutLineBreaks;
-        if (start == end) return;
-        if (start > end) (start, end) = (end, start);
+        if (!HasSelection) return;
+        int start = TrueSelectionStartWithoutLineBreaks;
+        int end = TrueSelectionEndWithoutLineBreaks;
         string fulltext = GetText();
         fulltext = fulltext.Substring(0, start) + fulltext.Substring(end);
         LoadValue(Lineize(fulltext));
@@ -840,21 +795,21 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     public override void RenderInteractiveElements(float deltaTime)
     {
         if (!HasFocus) return;
-        
-        // Render the selection box below the caret.
+        // Render the selection box.
         if (HasSelection)
         {
-            for (int i = SelectionStartLine; i <= SelectionEndLine && i < lines.Count; i++)
+            var ((selStartLine, selStartInLine), (selEndLine, selEndInLine)) = GetTrueSelectionPositions();
+            for (int i = selStartLine; i <= selEndLine && i < lines.Count; i++)
             {
                 double lineY = Bounds.renderY + topPadding + i * Font.GetFontExtents().Height;
-                double lineHeight = Font.GetFontExtents().Height;
+                double lineHeight = Font.GetFontExtents().Ascent + Font.GetFontExtents().Descent;
                 string lineText = lines[i];
 
                 double selStartX, selEndX;
                 // For the first line, start from the Caret selection position.
-                if (i == SelectionStartLine)
+                if (i == selStartLine)
                 {
-                    int startIdx = Math.Min(SelectionStartInLine, lineText.Length);
+                    int startIdx = Math.Min(selStartInLine, lineText.Length);
                     selStartX = Bounds.renderX + Bounds.absPaddingX + leftPadding +
                                 Font.GetTextExtents(lineText.Substring(0, startIdx)).XAdvance;
                 }
@@ -865,9 +820,9 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 }
 
                 // For the last line, use the selection end position.
-                if (i == SelectionEndLine)
+                if (i == selEndLine)
                 {
-                    int endIdx = Math.Min(SelectionEndInLine, lineText.Length);
+                    int endIdx = Math.Min(selEndInLine, lineText.Length);
                     selEndX = Bounds.renderX + Bounds.absPaddingX + leftPadding +
                               Font.GetTextExtents(lineText.Substring(0, endIdx)).XAdvance;
                 }
@@ -897,7 +852,6 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
     public override void Dispose()
     {
         base.Dispose();
-
         caretTexture.Dispose();
         textTexture.Dispose();
         selectionTexture.Dispose();
@@ -945,6 +899,7 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
             SetCaretPos(newPos, newLine);
             SelectionEndLine = CaretPosLine;
             SelectionEndInLine = CaretPosInLine;
+            OnSelectionChanged?.Invoke(SelectionStartLine, SelectionStartInLine, SelectionEndLine, SelectionEndInLine);
             api.Gui.PlaySound("tick");
         }
     }
