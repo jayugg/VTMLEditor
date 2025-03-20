@@ -60,7 +60,6 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
 
     public bool WordWrap = true;
 
-
     public List<string> GetLines() => new(lines);
 
     public int TextLengthWithoutLineBreaks {
@@ -81,20 +80,16 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         }
         set
         {
-            int sum = 0;
-            for (int i = 0; i < lines.Count; i++) {
-                int len = lines[i].Length;
+            if (value < 0) { SetCaretPos(0, 0); return; }
 
-                if (sum + len > value)
-                {
-                    SetCaretPos(value - sum, i);
-                    return;
-                }
-
-                sum += len;
+            int sum = 0, i = 0;
+            for (; i < lines.Count && sum + lines[i].Length <= value; i++)
+            {
+                sum += lines[i].Length;
             }
-            //else SetCaretPos(value - sum, Lines.Count); - why value-sum? that makes no sense
-            SetCaretPos(sum, !multilineMode ? 0 : lines.Count); 
+
+            if (i < lines.Count) SetCaretPos(value - sum, i);
+            else SetCaretPos(sum, !multilineMode ? 0 : lines.Count);
         }
     }
 
@@ -563,7 +558,8 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 handled = false;
                 break;
             case (int)GlKeys.BackSpace:
-                if (CaretPosWithoutLineBreaks > 0) OnKeyBackSpace();
+                if (args.CtrlPressed) OnCtrlBackspace();
+                else if (CaretPosWithoutLineBreaks > 0 || HasSelection) OnKeyBackSpace();
                 break;
             case (int)GlKeys.Delete:
                 if (CaretPosWithoutLineBreaks < TextLengthWithoutLineBreaks) OnKeyDelete();
@@ -734,6 +730,37 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         }
         api.Gui.PlaySound("tick");
     }
+    
+    private void OnCtrlBackspace()
+    {
+        string text = GetText();
+        int caret = CaretPosWithoutLineBreaks;
+        if (caret == 0) return;
+        int start = caret - 1;
+        // If the character immediately before the caret is whitespace,
+        // move backward until non-whitespace is found.
+        if (char.IsWhiteSpace(text[start]))
+        {
+            while (start >= 0 && char.IsWhiteSpace(text[start]))
+            {
+                start--;
+            }
+        }
+        else
+        {
+            // Otherwise, move backward until whitespace is found.
+            while (start >= 0 && !char.IsWhiteSpace(text[start]))
+            {
+                start--;
+            }
+        }
+        int deleteStart = start + 1; // word boundary found
+        // Remove the word preceding the caret.
+        string newText = text.Substring(0, deleteStart) + text.Substring(caret);
+        LoadValue(Lineize(newText));
+        CaretPosWithoutLineBreaks = deleteStart;
+        api.Gui.PlaySound("tick");
+    }
 
     private void OnKeyBackSpace()
     {
@@ -752,7 +779,6 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
                 CaretPosWithoutLineBreaks = caret - 1;
             }
         }
-
         api.Gui.PlaySound("tick");
     }
 
