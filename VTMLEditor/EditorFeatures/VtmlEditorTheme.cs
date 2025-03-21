@@ -17,10 +17,10 @@ public class VtmlEditorTheme
     public string FontName = GuiStyle.StandardFontName; // "monospace", "sans-serif", "menlo
 
     [JsonProperty]
-    public int FontSize = 14;
+    public int FontSize = 17;
     
     [JsonProperty]
-    public Dictionary<VtmlTokenType, string?> TokenColors { get; set; } = new()
+    public Dictionary<VtmlTokenType, string?> TokenColors = new()
     {
         // Gray for tag delimiters.
         { VtmlTokenType.TagDelimiter, ColorUtil.Doubles2Hex(new []{0.56,0.56,0.56,1.0}) },
@@ -45,6 +45,6 @@ public class VtmlEditorTheme
         }
         return color == null ? null : ColorUtil.Hex2Doubles(color);
     }
-    
-    public static VtmlEditorTheme Default => new VtmlEditorTheme();
+
+    public static readonly VtmlEditorTheme Default = new();
 }

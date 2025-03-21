@@ -7,6 +7,7 @@ public class GuiDialogVTMLViewer : GuiDialog
     public override double DrawOrder => 0.2;
     public string DialogTitle;
     private string text = "";
+    private double listHeight = 500; // Emulate hardcoded value from GuiDialogHandbook
     public string Text { get => text; set => text = value; }
 
     public GuiDialogVTMLViewer(ICoreClientAPI? capi, string DialogTitle) : base(capi)
@@ -18,41 +19,38 @@ public class GuiDialogVTMLViewer : GuiDialog
 
     private void ComposeDialog()
     {
-        ElementBounds dialogBounds = ElementStdBounds.AutosizedMainDialog.WithAlignment(EnumDialogArea.CenterMiddle);
+        ElementBounds textBounds = ElementBounds.Fixed(9, 45, 500, listHeight + 30 + 17);
+        ElementBounds clipBounds = textBounds.ForkBoundingParent();
+        ElementBounds insetBounds = textBounds.FlatCopy().FixedGrow(6).WithFixedOffset(-3, -3);
+        ElementBounds scrollbarBounds = clipBounds.CopyOffsetedSibling(textBounds.fixedWidth + 7, -6, 0, 6).WithFixedWidth(20);
         
-        ElementBounds insetBounds = ElementBounds.Fixed(0, GuiStyle.TitleBarHeight, 510, 678);
-        ElementBounds scrollbarBounds = insetBounds.RightCopy().WithFixedWidth(20);
 
-        ElementBounds textBounds = insetBounds.ForkContainingChild(GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding);
-        ElementBounds bgBounds = ElementBounds.Fill
-            .WithFixedPadding(GuiStyle.ElementToDialogPadding)
-            .WithSizing(ElementSizing.FitToChildren)
-            .WithChildren(insetBounds, scrollbarBounds);
-        
-        ElementBounds clipBounds = insetBounds.ForkContainingChild(GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding, GuiStyle.HalfPadding);
+        ElementBounds bgBounds = insetBounds.ForkBoundingParent(5, 40, 36, 52).WithFixedPadding(GuiStyle.ElementToDialogPadding / 2);
+        bgBounds.WithChildren(insetBounds, textBounds, scrollbarBounds);
+
+        ElementBounds dialogBounds = bgBounds.ForkBoundingParent().WithAlignment(EnumDialogArea.None).WithAlignment(EnumDialogArea.RightMiddle);
 
         SingleComposer = capi.Gui.CreateCompo(DialogTitle, dialogBounds)
                 .AddShadedDialogBG(bgBounds)
                 .AddDialogTitleBar(DialogTitle, OnTitleBarClose)
-                .BeginChildElements()
-                .AddInset(insetBounds)
+                .BeginChildElements(bgBounds)
                 .BeginClip(clipBounds)
-                .AddRichtext(text, CairoFont.WhiteSmallText(), textBounds, "text")
+                .AddInset(insetBounds, 3)
+                .AddRichtext(text, CairoFont.WhiteSmallText().WithLineHeightMultiplier(1.2), textBounds, "text")
                 .EndClip()
                 .AddVerticalScrollbar(OnNewScrollbarValue, scrollbarBounds, "scrollbar")
+                .EndChildElements()
                 .Compose();
         
-        // After composing dialog, need to set the scrolling area heights to enable scroll behavior
-        float scrollVisibleHeight = (float)clipBounds.fixedHeight;
-        float scrollTotalHeight = (float)SingleComposer.GetRichtext("text").TotalHeight;
-        SingleComposer.GetScrollbar("scrollbar").SetHeights(scrollVisibleHeight, scrollTotalHeight);
+        float scrollTotalHeight = (float)SingleComposer.GetRichtext("text").Bounds.fixedHeight;
+        SingleComposer.GetScrollbar("scrollbar").SetHeights((float)listHeight, scrollTotalHeight);
     }
 
     private void OnNewScrollbarValue(float value)
     {
-        ElementBounds bounds = SingleComposer.GetRichtext("text").Bounds;
-        bounds.fixedY = 5 - value;
-        bounds.CalcWorldBounds();
+        GuiElementRichtext richtextElem = SingleComposer.GetRichtext("text");
+        richtextElem.Bounds.fixedY = 3 - value;
+        richtextElem.Bounds.CalcWorldBounds();
     }
 
     public void RefreshDialog()

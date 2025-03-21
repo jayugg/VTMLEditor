@@ -4,7 +4,6 @@ using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using VTMLEditor.EditorFeatures;
-using VTMLEditor.GuiElements;
 
 namespace VTMLEditor;
 
@@ -18,7 +17,6 @@ public class VtmleSystem : ModSystem
     private GuiDialogVTMLEditor? _editorDialog;
     private GuiDialogVTMLViewer? _viewerDialog;
     public static string UiKeyCode => Modid + ":hotkey-vtml-editor";
-
     public static Dictionary<AssetLocation, VtmlEditorTheme> Themes = new();
 
     public override void StartPre(ICoreAPI api)
@@ -35,7 +33,7 @@ public class VtmleSystem : ModSystem
     {
         base.StartClientSide(api);
         Capi = api;
-        api?.Input.RegisterHotKey(UiKeyCode, Lang.Get(UiKeyCode), GlKeys.Y, HotkeyType.DevTool);
+        api?.Input.RegisterHotKey(UiKeyCode, Lang.Get(UiKeyCode), GlKeys.U, HotkeyType.DevTool);
         api?.Input.SetHotKeyHandler(UiKeyCode, this.OnEditorHotkey);
         if (api == null) return;
         api.Event.LevelFinalize += this.Event_LevelFinalize;

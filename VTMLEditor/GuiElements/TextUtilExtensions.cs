@@ -64,8 +64,8 @@ public static class TextUtilExtensions
             bool textPathMode = false)
         {
             ctx.Save();
-            font.SetupContext(ctx);
-            double baselineY = offsetY + ctx.FontExtents.Ascent;
+            //font.SetupContext(ctx); Do not set the font to context, it will mess up line spacings
+            double baselineY = offsetY + font.GetFontExtents().Ascent; // Use font for correct baseline, not context.
             double currentX = offsetX;
             foreach (var token in tokens)
             {
@@ -126,6 +126,7 @@ public static class TextUtilExtensions
         cairoFont.Color = (double[]) GuiStyle.DialogDefaultTextColor.Clone();
         cairoFont.Fontname = fontName;
         cairoFont.UnscaledFontsize = fontSize;
+        cairoFont.WithLineHeightMultiplier(1.5);
         return cairoFont;
     }
 }

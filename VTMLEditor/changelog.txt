@@ -1,2 +1,7 @@
-- Allow selection in editor
-- Fix incomplete hotkey tag vanilla crash
+- Change default hotkey binding to U
+- Allow selection and advanced keyboard shortcuts in editor
+- Fix vanilla crash from incomplete hotkey tags
+- Resized viewer page to be identical to handbook page
+- Improved editor page
+- Some auto tag insertion buttons
+- Fix theme not loading by default

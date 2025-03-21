@@ -27,8 +27,35 @@ public class GuiElementEditorArea : Vanilla.GuiElementTextArea
             )
             : base(capi, bounds, OnTextChanged, font)
         {
-            this.OnTextChanged = OnTextChanged;
             this.ThemeColors = themeColors;
+            this.OnTextChanged = OnTextChanged;
+        }
+        
+        // Change highlight compared to normal text area
+        public override void ComposeTextElements(Context ctx, ImageSurface surface)
+        {
+            EmbossRoundRectangleElement(ctx, Bounds, true, 3);
+            ctx.SetSourceRGBA(0, 0, 0, 0.2f);
+            ElementRoundRectangle(ctx, Bounds, true, 3);
+            ctx.Fill();
+            GenerateHighlight();
+            RecomposeText();
+        }
+
+        private void GenerateHighlight()
+        {
+            ImageSurface surfaceHighlight = new ImageSurface(Format.Argb32, (int)Bounds.OuterWidth, (int)Bounds.OuterHeight);
+            Context ctxHighlight = genContext(surfaceHighlight);
+
+            ctxHighlight.SetSourceRGBA(1, 1, 1, 0.0);
+            ctxHighlight.Paint();
+            generateTexture(surfaceHighlight, ref highlightTexture);
+
+            ctxHighlight.Dispose();
+            surfaceHighlight.Dispose();
+
+            highlightBounds = Bounds.FlatCopy();
+            highlightBounds.CalcWorldBounds();
         }
 
         public override void DrawTextLineAt(Context ctx, string textIn, double posX, double posY, bool textPathModeIn = false)
@@ -48,5 +75,32 @@ public class GuiElementEditorArea : Vanilla.GuiElementTextArea
                 };
             }
             this.textUtil.DrawMultilineTextHighligtedAt(ThemeColors, ctx, this.Font, textlines, this.Bounds.absPaddingX + this.leftPadding, this.Bounds.absPaddingY, width);
+        }
+
+        public override void OnKeyDown(ICoreClientAPI capi, KeyEvent args)
+        {
+            base.OnKeyDown(capi, args);
+            var selection = GetSelectedText();
+            switch (args.KeyCode)
+            {
+                case (int)GlKeys.I when args.CtrlPressed || args.CommandPressed:
+                    InsertTextAtCursor($"<i>{selection}</i>");
+                    break;
+                case (int)GlKeys.B when args.CtrlPressed || args.CommandPressed:
+                    InsertTextAtCursor($"<strong>{selection}</strong>");
+                    break;
+            }
+        }
+        
+        // Don't clear selection on focus lost so tag can work
+        public override void OnFocusLost()
+        {
+            this.hasFocus = false;
+            OnLostFocus?.Invoke();
+        }
+        
+        public void SetFocused(bool focus)
+        {
+            this.hasFocus = focus;
         }
     }

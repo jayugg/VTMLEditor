@@ -1,8 +1,8 @@
 [
   {
-    "Code": "default",
+    "Code": "simple",
     "FontName": "sans-serif",
-    "FontSize": "14",
+    "FontSize": "17",
     "TokenColors": {
       "TagDelimiter": "#8F8F8FFF",
       "TagName": "#8F8F8FFF",
@@ -15,7 +15,7 @@
   {
     "Code": "monospace",
     "FontName": "monospace",
-    "FontSize": "13",
+    "FontSize": "18",
     "TokenColors": {
       "TagDelimiter": "#8F8F8FFF",
       "TagName": "#8F8F8FFF",
@@ -28,7 +28,7 @@
   {
     "Code": "menlo",
     "FontName": "menlo",
-    "FontSize": "13",
+    "FontSize": "18",
     "TokenColors": {
       "TagDelimiter": "#8F8F8FFF",
       "TagName": "#8F8F8FFF",
@@ -41,7 +41,7 @@
   {
     "Code": "dune",
     "FontName": "menlo",
-    "FontSize": "13",
+    "FontSize": "18",
     "TokenColors": {
       "TagDelimiter": "#1fad83ff",
       "TagName": "#1fad83ff",
@@ -54,7 +54,7 @@
   {
     "Code": "savannah",
     "FontName": "menlo",
-    "FontSize": "13",
+    "FontSize": "18",
     "TokenColors": {
       "TagDelimiter": "#489963ff",
       "TagName": "#1c9aa0ff",
@@ -67,7 +67,7 @@
   {
     "Code": "cave",
     "FontName": "menlo",
-    "FontSize": "13",
+    "FontSize": "18",
     "TokenColors": {
       "TagDelimiter": "#a06e3bff",
       "TagName": "#aa573cff",
