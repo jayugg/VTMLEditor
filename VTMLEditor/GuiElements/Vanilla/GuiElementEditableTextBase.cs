@@ -584,7 +584,7 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
             return;
         }
         long now = api.ElapsedMilliseconds;
-        if (now - mouseClickMilliseconds < 250) mouseClickCount++;
+        if (now - mouseClickMilliseconds < 250 && hasFocus) mouseClickCount++;
         else mouseClickCount = 0;
         mouseClickMilliseconds = now;
         switch (mouseClickCount)

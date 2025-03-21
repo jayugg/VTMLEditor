@@ -8,8 +8,10 @@ namespace VTMLEditor.GuiElements.Vanilla;
 public class GuiElementTextArea : GuiElementEditableTextBase
 {
     double minHeight;
-    LoadedTexture highlightTexture;
-    ElementBounds highlightBounds;
+    
+    // j: Expose to child classes
+    protected LoadedTexture highlightTexture;
+    protected ElementBounds highlightBounds;
 
     public bool Autoheight = true;
 
@@ -88,7 +90,7 @@ public class GuiElementTextArea : GuiElementEditableTextBase
     public override void Dispose()
     {
         base.Dispose();
-        highlightTexture.Dispose();
+        highlightTexture?.Dispose();
     }
 
     public void SetFont(CairoFont cairoFont)
