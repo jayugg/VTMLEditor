@@ -13,7 +13,7 @@ public class GuiDialogVTMLEditor : GuiDialog
 {
   public override double DrawOrder => 0.2;
   public string DialogTitle;
-  private string searchLangKey = Lang.DefaultLocale;
+  private string searchLangKey = Lang.CurrentLocale;
   private string? SearchTextInput { get; set; }
   private GuiDialogVTMLViewer? viewerDialog;
   public AssetLocation? SelectedThemeLoc { get; set; } = VtmleSystem.Themes.Keys.FirstOrDefault();
@@ -157,7 +157,7 @@ public class GuiDialogVTMLEditor : GuiDialog
   private bool OnPressSearch()
   {
     string searchText = SingleComposer.GetNewTextInput("searchInput").GetText();
-    var langText = searchLangKey != Lang.DefaultLocale ? Lang.GetL(searchLangKey, searchText) : Lang.Get(searchText);
+    var langText = searchLangKey != Lang.CurrentLocale ? Lang.GetL(searchLangKey, searchText) : Lang.Get(searchText);
     if (langText == searchText)
     {
       if (searchText.StartsWith("@"))

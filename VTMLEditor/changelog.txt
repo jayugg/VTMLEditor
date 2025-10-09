@@ -1,7 +1,1 @@
-- Change default hotkey binding to U
-- Allow selection and advanced keyboard shortcuts in editor
-- Fix vanilla crash from incomplete hotkey tags
-- Resized viewer page to be identical to handbook page
-- Improved editor page
-- Some auto tag insertion buttons
-- Fix theme not loading by default
+- [Fixed] Language locale defaulting to EN on selection instead of current locale

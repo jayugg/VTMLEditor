@@ -1,0 +1,20 @@
+<Project>
+  <!-- Set your vs installation here! -->
+  <PropertyGroup>
+    <VINTAGE_STORY>$(VINTAGE_STORY_1_21)</VINTAGE_STORY>
+    <WorldName>[TEST] VTMLEditor</WorldName>
+    <TestDir>$(SolutionDir)/test</TestDir>
+    <TestDataPath>$(TestDir)/VintagestoryData</TestDataPath>
+    <DevModPath>$(HOME)/Library/Application Support/VintagestoryDev/Mods</DevModPath>
+  </PropertyGroup>
+
+  <!-- Shorten stacktrace paths -->
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <DeterministicSourcePaths>true</DeterministicSourcePaths>
+  </PropertyGroup>
+  <!-- Make the project root a source root so paths get normalized -->
+  <ItemGroup>
+    <SourceRoot Include="$(MSBuildThisFileDirectory)"/>
+  </ItemGroup>
+</Project>
