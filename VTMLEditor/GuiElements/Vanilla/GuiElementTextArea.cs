@@ -35,7 +35,16 @@ public class GuiElementTextArea : GuiElementEditableTextBase
         this.OnTextChanged = OnTextChanged;
     }
     
+    private bool textChangeDelayed;
+
     internal override void TextChanged()
+    {
+        if(textChangeDelayed) return;
+        textChangeDelayed = true;
+        api.Event.EnqueueMainThreadTask(TextChangedDelayed, "TextChangedDelayed");
+    }
+
+    private void TextChangedDelayed()
     {
         if (Autoheight)
         {
@@ -43,6 +52,7 @@ public class GuiElementTextArea : GuiElementEditableTextBase
         }
         Bounds.CalcWorldBounds();
         base.TextChanged();
+        textChangeDelayed = false;
     }
 
     public override void ComposeTextElements(Context ctx, ImageSurface surface)
