@@ -453,8 +453,8 @@ public abstract class GuiElementEditableTextBase : GuiElementTextBase
         // If there is a selection, replace the selected text
         if (HasSelection)
         {
-            int start = SelectionStartWithoutLineBreaks;
-            int end = SelectionEndWithoutLineBreaks;
+            int start = TrueSelectionStartWithoutLineBreaks;
+            int end = TrueSelectionEndWithoutLineBreaks;
             fulltext = fulltext[..start] + insert + fulltext[end..];
             newCaretPos = start + insert.Length;
         }
