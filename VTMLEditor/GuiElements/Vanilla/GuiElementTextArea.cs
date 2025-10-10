@@ -40,8 +40,8 @@ public class GuiElementTextArea : GuiElementEditableTextBase
     internal override void TextChanged()
     {
         if(textChangedBatchedQueued) return;
-        textChangedBatchedQueued = true;
         api.Event.EnqueueMainThreadTask(TextChangedBatched, "TextChangedBatched");
+        textChangedBatchedQueued = true;
     }
 
     private void TextChangedBatched()
