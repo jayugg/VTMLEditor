@@ -35,24 +35,34 @@ public class GuiElementTextArea : GuiElementEditableTextBase
         this.OnTextChanged = OnTextChanged;
     }
     
-    private bool textChangeDelayed;
+    private bool textChangedBatchedQueued;
 
     internal override void TextChanged()
     {
-        if(textChangeDelayed) return;
-        textChangeDelayed = true;
-        api.Event.EnqueueMainThreadTask(TextChangedDelayed, "TextChangedDelayed");
+        if(textChangedBatchedQueued) return;
+        textChangedBatchedQueued = true;
+        api.Event.EnqueueMainThreadTask(TextChangedBatched, "TextChangedBatched");
     }
 
-    private void TextChangedDelayed()
+    private void TextChangedBatched()
     {
-        if (Autoheight)
+        try
         {
-            Bounds.fixedHeight = Math.Max(minHeight, textUtil.GetMultilineTextHeight(Font, string.Join("\n", lines), Bounds.InnerWidth));
+            if (Autoheight)
+            {
+                Bounds.fixedHeight = Math.Max(minHeight, textUtil.GetMultilineTextHeight(Font, string.Join("\n", lines), Bounds.InnerWidth));
+            }
+            Bounds.CalcWorldBounds();
+            base.TextChanged();
         }
-        Bounds.CalcWorldBounds();
-        base.TextChanged();
-        textChangeDelayed = false;
+        catch(Exception ex)
+        {
+            api.Logger.Error("[VTMLEditor] an error occured during text change: {0}", ex);
+        }
+        finally
+        {
+            textChangedBatchedQueued = false;
+        }
     }
 
     public override void ComposeTextElements(Context ctx, ImageSurface surface)
